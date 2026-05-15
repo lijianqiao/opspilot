@@ -1,0 +1,7 @@
+[project]
+name = "opspilot"
+version = "0.1.0"
+description = "一个用 LLM Agent 驱动的运维智能助手平台"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
