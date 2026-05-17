@@ -9,13 +9,9 @@ from opspilot.llm.client import LLMClient
 @pytest.mark.anyio
 @respx.mock
 async def test_chat_posts_openai_payload_and_parses_reply() -> None:
-    settings = Settings(
-        llm_base_url="http://test/v1", llm_model="m", llm_api_key="k"
-    )
+    settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
     route = respx.post("http://test/v1/chat/completions").mock(
-        return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": "hello"}}]}
-        )
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
     )
     client = LLMClient(settings)
     try:

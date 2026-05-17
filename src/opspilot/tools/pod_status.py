@@ -11,7 +11,5 @@ def get_pod_status(namespace: str = "default") -> str:
     if not pods:
         return f"namespace {namespace} 下没有找到 pod。"
     lines = ["NAME\tREADY\tSTATUS\tRESTARTS"]
-    lines += [
-        f"{p['name']}\t{p['ready']}\t{p['status']}\t{p['restarts']}" for p in pods
-    ]
+    lines += [f"{p['name']}\t{p['ready']}\t{p['status']}\t{p['restarts']}" for p in pods]
     return "\n".join(lines)

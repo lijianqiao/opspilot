@@ -34,9 +34,7 @@ class SupportsChat(Protocol):
     async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
-async def run_react(
-    question: str, llm: SupportsChat, max_steps: int = 5
-) -> str:
+async def run_react(question: str, llm: SupportsChat, max_steps: int = 5) -> str:
     messages: list[dict[str, str]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
@@ -55,16 +53,12 @@ async def run_react(
         tool_name = action.group(1)
         tool = TOOLS.get(tool_name)
         if tool is None:
-            observation = (
-                f"错误：工具 {tool_name} 不存在。可用工具：{list(TOOLS)}"
-            )
+            observation = f"错误：工具 {tool_name} 不存在。可用工具：{list(TOOLS)}"
         else:
             arg = _ACTION_INPUT_RE.search(reply)
             namespace = (arg.group(1).strip() if arg else "default") or "default"
             observation = tool(namespace)
 
-        messages.append(
-            {"role": "user", "content": f"Observation: {observation}"}
-        )
+        messages.append({"role": "user", "content": f"Observation: {observation}"})
 
     return "达到最大推理步数，未能得到最终答案。"

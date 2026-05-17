@@ -14,9 +14,7 @@ class _NoopLLM:
 
 
 def test_cli_ask_outputs_answer(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_run_react(
-        question: str, llm: object, max_steps: int = 5
-    ) -> str:
+    async def fake_run_react(question: str, llm: object, max_steps: int = 5) -> str:
         return f"FAKE:{question}"
 
     monkeypatch.setattr(cli, "run_react", fake_run_react)

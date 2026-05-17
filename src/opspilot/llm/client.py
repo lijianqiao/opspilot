@@ -10,9 +10,7 @@ Message = dict[str, str]
 class LLMClient:
     """调用 OpenAI 兼容 /chat/completions 的最小异步客户端。"""
 
-    def __init__(
-        self, settings: Settings, http_client: httpx.AsyncClient | None = None
-    ) -> None:
+    def __init__(self, settings: Settings, http_client: httpx.AsyncClient | None = None) -> None:
         self._settings = settings
         self._client = http_client or httpx.AsyncClient(timeout=120.0)
 
