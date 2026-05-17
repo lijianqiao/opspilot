@@ -22,8 +22,5 @@ wheels/
 .env
 .venv/
 
-# docs files
-docs/
-
 # vscode
 .vscode/
