@@ -15,8 +15,15 @@ wheels/
 .ruff_cache/
 .claude/worktree/
 
+# ides
+.claude/
+
 # environment variables
 .env
+.venv/
 
 # docs files
 docs/
+
+# vscode
+.vscode/
