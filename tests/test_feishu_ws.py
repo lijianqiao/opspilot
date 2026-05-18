@@ -1,7 +1,10 @@
 import anyio
 import pytest
 
-from opspilot.entrypoints.feishu_ws import _run_blocking, handle_question
+from opspilot.entrypoints.feishu_ws import (
+    _run_blocking,
+    handle_question,
+)
 
 
 @pytest.mark.anyio
@@ -18,6 +21,16 @@ async def test_handle_question_rejects_empty() -> None:
         raise AssertionError("空输入不应调用 agent")
 
     assert "请输入" in await handle_question("   ", agent)
+
+
+@pytest.mark.anyio
+async def test_handle_question_returns_error_message_on_agent_failure() -> None:
+    async def boom(text: str) -> str:
+        raise RuntimeError("LLM connection refused")
+
+    result = await handle_question("pod 状态", boom)
+    assert "出错" in result
+    assert "LLM connection refused" in result
 
 
 @pytest.mark.anyio
@@ -46,5 +59,8 @@ async def test_run_blocking_propagates_agent_error() -> None:
     async def boom(text: str) -> str:
         raise ValueError("agent failed")
 
-    with pytest.raises(ValueError, match="agent failed"):
-        _run_blocking("hi", boom)
+    # handle_question now catches errors and returns a user-friendly message
+    # instead of propagating the exception.
+    result = _run_blocking("hi", boom)
+    assert "出错" in result
+    assert "agent failed" in result

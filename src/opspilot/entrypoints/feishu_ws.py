@@ -10,7 +10,7 @@ from lark_oapi.api.im.v1 import (
     P2ImMessageReceiveV1,
 )
 
-from opspilot.agent.react import run_react
+from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.config import get_settings
 from opspilot.llm.client import LLMClient
 
@@ -22,7 +22,10 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     text = text.strip()
     if not text:
         return "请输入你的运维问题。"
-    return await agent(text)
+    try:
+        return await agent(text)
+    except Exception as exc:
+        return f"处理问题时出错：{exc}"
 
 
 def _run_blocking(text: str, agent: AgentFn) -> str:
@@ -66,7 +69,7 @@ def run() -> None:  # 手动验证，不进单测
     async def _agent(text: str) -> str:
         llm = LLMClient(settings)
         try:
-            return await run_react(text, llm)
+            return await run_react_graph(text, llm)
         finally:
             await llm.aclose()
 

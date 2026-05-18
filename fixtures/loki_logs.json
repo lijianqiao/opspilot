@@ -1,0 +1,22 @@
+{
+  "streams": [
+    {
+      "stream": {"namespace": "default", "pod": "order-service-5c7b9d-klmno", "container": "order-service"},
+      "values": [
+        ["1716000000000000000", "2024-05-18T00:00:00Z ERROR Failed to connect to database: connection refused"],
+        ["1716000001000000000", "2024-05-18T00:00:01Z ERROR Retry 1/3: database connection"],
+        ["1716000002000000000", "2024-05-18T00:00:02Z INFO  Starting order-service v2.1.0"],
+        ["1716000003000000000", "2024-05-18T00:00:03Z ERROR OOMKilled: memory limit exceeded"],
+        ["1716000004000000000", "2024-05-18T00:00:04Z WARN  Health check failing, retrying in 5s"]
+      ]
+    },
+    {
+      "stream": {"namespace": "default", "pod": "user-service-7d9f8c-abcde", "container": "user-service"},
+      "values": [
+        ["1716000000000000000", "2024-05-18T00:00:00Z INFO  user-service ready on :8080"],
+        ["1716000001000000000", "2024-05-18T00:00:01Z INFO  GET /api/users 200 12ms"],
+        ["1716000002000000000", "2024-05-18T00:00:02Z WARN  Slow query detected: 850ms"]
+      ]
+    }
+  ]
+}
