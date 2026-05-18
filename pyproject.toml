@@ -10,6 +10,10 @@ dependencies = [
     "typer>=0.25.1",
     "anyio>=4.13.0",
     "lark-oapi>=1.6.5",
+    "langgraph>=1.2.0",
+    "langchain-openai>=1.2.1",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "psycopg[binary]>=3.2.0",
 ]
 
 [project.scripts]
@@ -32,6 +36,10 @@ packages = ["src/opspilot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:datetime.datetime.utcfromtimestamp\\(\\) is deprecated:DeprecationWarning:lark_oapi",
+    "ignore:There is no current event loop:DeprecationWarning:lark_oapi",
+]
 
 [tool.ruff]
 line-length = 120

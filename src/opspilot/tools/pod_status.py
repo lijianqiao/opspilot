@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+from opspilot.tools.registry import register_tool
+
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
+@register_tool
 def get_pod_status(namespace: str = "default") -> str:
     """查询指定 namespace 下的 pod 状态，返回类似 kubectl get pods 的文本表。"""
     raw = (FIXTURES_DIR / "kubectl_pods.json").read_text(encoding="utf-8")

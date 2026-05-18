@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import pytest
+
+from opspilot.agent.langgraph_agent import run_react_graph
+
+
+class FakeLLM:
+    """Same FakeLLM as test_react.py — duck-types SupportsChat."""
+
+    def __init__(self, replies: list[str]) -> None:
+        self._replies = replies
+        self.calls: list[list[dict[str, str]]] = []
+
+    async def chat(self, messages: list[dict[str, str]]) -> str:
+        self.calls.append([dict(m) for m in messages])
+        return self._replies.pop(0)
+
+
+@pytest.mark.anyio
+async def test_graph_calls_tool_then_returns_final_answer() -> None:
+    llm = FakeLLM(
+        [
+            "Thought: 查一下\nAction: get_pod_status\nAction Input: default",
+            "Thought: 有了\nFinal Answer: default 下 order-service 处于 CrashLoopBackOff。",
+        ]
+    )
+    answer = await run_react_graph("default 有几个 pod", llm)
+    assert "CrashLoopBackOff" in answer
+    assert len(llm.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_graph_unknown_tool_is_reported() -> None:
+    llm = FakeLLM(
+        [
+            "Action: nonexistent_tool\nAction Input: x",
+            "Final Answer: 已向用户说明该工具不可用。",
+        ]
+    )
+    answer = await run_react_graph("q", llm)
+    assert "已向用户说明" in answer
+    obs = llm.calls[1][-1]["content"]
+    assert "不存在" in obs
+
+
+@pytest.mark.anyio
+async def test_graph_stops_at_max_steps() -> None:
+    llm = FakeLLM(["Action: get_pod_status\nAction Input: default"] * 10)
+    answer = await run_react_graph("q", llm, max_steps=3)
+    assert "最大推理步数" in answer
+    assert len(llm.calls) == 3
+
+
+@pytest.mark.anyio
+async def test_graph_json_action_input() -> None:
+    llm = FakeLLM(
+        [
+            'Thought: 查日志\nAction: query_loki\nAction Input: {"query": "error"}',
+            "Thought: 找到了\nFinal Answer: 发现 ERROR 日志。",
+        ]
+    )
+    answer = await run_react_graph("查错误日志", llm)
+    assert "发现" in answer
+
+
+@pytest.mark.anyio
+async def test_graph_matches_handwritten_behavior() -> None:
+    """LangGraph version should produce the same result as hand-written for identical input."""
+    from opspilot.agent.react import run_react
+
+    replies_1 = [
+        "Thought: 查一下\nAction: get_pod_status\nAction Input: default",
+        "Thought: 有了\nFinal Answer: order-service CrashLoopBackOff。",
+    ]
+    replies_2 = list(replies_1)
+
+    llm1 = FakeLLM(replies_1)
+    llm2 = FakeLLM(replies_2)
+
+    answer_hand = await run_react("default pod 状态", llm1)
+    answer_graph = await run_react_graph("default pod 状态", llm2)
+    assert answer_hand == answer_graph
