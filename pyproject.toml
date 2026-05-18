@@ -36,6 +36,10 @@ packages = ["src/opspilot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:datetime.datetime.utcfromtimestamp\\(\\) is deprecated:DeprecationWarning:lark_oapi",
+    "ignore:There is no current event loop:DeprecationWarning:lark_oapi",
+]
 
 [tool.ruff]
 line-length = 120
