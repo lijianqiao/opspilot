@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import logging
 import re
+from contextvars import ContextVar
 from typing import Annotated, Any, Protocol
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from opspilot.tools.registry import build_tools_prompt, call_tool, get_registered_tools
+from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,6 @@ class AgentState(TypedDict):
     question: str
     steps_taken: int
     max_steps: int
-    final_answer: str | None
 
 
 # --- Regex patterns ---
@@ -56,20 +56,21 @@ _FINAL_RE = re.compile(r"Final Answer:\s*(.*)", re.DOTALL)
 
 # --- Nodes ---
 
-# Module-level LLM reference — set by run_react_graph() before ainvoke().
+# ContextVar for LLM reference — set by run_react_graph() before ainvoke().
 # LangGraph StateGraph only processes keys declared in the schema, so we
-# can't pass the LLM through state. A module-level variable is the
-# simplest workaround for a single-threaded agent loop.
-_current_llm: SupportsChat | None = None
+# can't pass the LLM through state. ContextVar is async-safe: each
+# concurrent task gets its own copy automatically.
+_current_llm: ContextVar[SupportsChat] = ContextVar("_current_llm")
 
 
 async def agent_node(state: AgentState) -> dict[str, Any]:
     """Call the LLM and append the reply to messages."""
-    if _current_llm is None:
+    llm = _current_llm.get(None)
+    if llm is None:
         raise RuntimeError("LLM not set. Call run_react_graph() which sets _current_llm.")
 
     messages = state["messages"]
-    reply = await _current_llm.chat(messages)
+    reply = await llm.chat(messages)
     return {
         "messages": [{"role": "assistant", "content": reply}],
         "steps_taken": state["steps_taken"] + 1,
@@ -141,11 +142,9 @@ async def run_react_graph(
     outputs. The difference is internal: uses a compiled StateGraph
     with conditional edges instead of a for-loop.
     """
-    tools = get_registered_tools()
     system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
 
-    global _current_llm
-    _current_llm = llm
+    _current_llm.set(llm)
 
     initial_state: dict[str, Any] = {
         "messages": [
@@ -155,7 +154,6 @@ async def run_react_graph(
         "question": question,
         "steps_taken": 0,
         "max_steps": max_steps,
-        "final_answer": None,
     }
 
     result = await _compiled_graph.ainvoke(initial_state)
