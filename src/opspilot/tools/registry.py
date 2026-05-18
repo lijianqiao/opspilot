@@ -30,6 +30,7 @@ class ToolInfo:
     description: str
     func: Callable[..., str]
     parameters: dict[str, Any] = field(default_factory=dict)
+    risk: str = "low"
 
 
 def _infer_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
@@ -64,7 +65,7 @@ def _infer_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
 
 
 def register_tool(
-    func: Callable[..., str] | None = None, *, name: str | None = None
+    func: Callable[..., str] | None = None, *, name: str | None = None, risk: str = "low"
 ) -> Callable[..., str] | Callable[[Callable[..., str]], Callable[..., str]]:
     """Decorator to register a function as an OpsPilot tool.
 
@@ -84,6 +85,7 @@ def register_tool(
             description=doc.split("\n")[0],  # first line only
             func=f,
             parameters=_infer_json_schema(f),
+            risk=risk,
         )
         _registry[tool_name] = info
         return f
