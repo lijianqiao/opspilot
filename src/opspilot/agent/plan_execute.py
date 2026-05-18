@@ -58,9 +58,14 @@ def _llm() -> SupportsChat:
 
 async def planner_node(state: PlanState) -> dict[str, Any]:
     prompt = (
-        f"请把以下运维任务拆成 1-3 个编号步骤，每行一个，格式如：1. 查看pod状态\n2. 总结结果\n\n"
-        f"任务：{state['question']}\n\n"
-        f"只输出编号步骤，不要输出其他内容。"
+        f"你是运维助手 OpsPilot 的规划器。请把用户任务拆成有序的执行步骤。\n\n"
+        f"要求：\n"
+        f"- 每个步骤应该是可独立执行的具体操作（如查询状态、检查日志、分析指标）\n"
+        f"- 步骤之间有逻辑顺序，先收集信息再分析总结\n"
+        f"- 最后一步通常是汇总结果并给出结论\n"
+        f"- 步骤数量根据任务复杂度决定，简单任务 2-3 步，复杂任务可适当增加\n\n"
+        f"格式：每行一个步骤，形如 `1. 查看 default 命名空间的 pod 状态`\n\n"
+        f"任务：{state['question']}"
     )
     reply = await _llm().chat([{"role": "user", "content": prompt}])
     logger.info("Planner reply: %s", reply[:300])
