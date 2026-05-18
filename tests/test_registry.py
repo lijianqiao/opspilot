@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from opspilot.tools.registry import (
-    ToolInfo,
     _registry,
     build_tools_prompt,
     call_tool,
@@ -87,6 +86,7 @@ def test_get_registered_tools_returns_copy() -> None:
 
 def test_call_tool_json_object_input() -> None:
     """JSON object with named kwargs should be unpacked correctly."""
+
     @register_tool
     def greet(name: str, greeting: str = "hi") -> str:
         return f"{greeting} {name}"
@@ -97,6 +97,7 @@ def test_call_tool_json_object_input() -> None:
 
 def test_call_tool_single_required_param_fallback() -> None:
     """Plain string input with one required param should pass as that param."""
+
     @register_tool
     def echo(message: str) -> str:
         return message
@@ -107,6 +108,7 @@ def test_call_tool_single_required_param_fallback() -> None:
 
 def test_call_tool_single_required_param_fallback_with_coercion() -> None:
     """Plain string input should be coerced to the required param's type."""
+
     @register_tool
     def double(n: int) -> str:
         return str(n * 2)
@@ -117,6 +119,7 @@ def test_call_tool_single_required_param_fallback_with_coercion() -> None:
 
 def test_call_tool_first_positional_fallback() -> None:
     """When there are multiple required params, the first gets the value."""
+
     @register_tool
     def pair(a: str, b: str = "default") -> str:
         return f"{a}-{b}"
@@ -134,6 +137,7 @@ def test_call_tool_unknown_tool() -> None:
 
 def test_call_tool_execution_error() -> None:
     """Tool that raises should return a formatted error string."""
+
     @register_tool
     def bad_tool(x: str) -> str:
         raise ValueError("something broke")

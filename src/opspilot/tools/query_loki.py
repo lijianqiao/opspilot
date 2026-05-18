@@ -20,7 +20,7 @@ def query_loki(query: str, namespace: str = "default", limit: int = 100) -> str:
         if ns != namespace:
             continue
         pod = stream["stream"].get("pod", "unknown")
-        for ts, line in stream["values"]:
+        for _ts, line in stream["values"]:
             if query.lower() in line.lower():
                 results.append(f"[{pod}] {line}")
     if not results:

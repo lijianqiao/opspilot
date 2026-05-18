@@ -37,9 +37,7 @@ async def run_react(
     - Action Input parsed as JSON when possible (multi-arg support)
     - Tool execution errors caught and fed back as observations via call_tool()
     """
-    system_prompt = (
-        f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
-    )
+    system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
 
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_prompt},
@@ -68,8 +66,6 @@ async def run_react(
         # Execute tool with error handling
         observation = call_tool(tool_name, raw_input)
 
-        messages.append(
-            {"role": "user", "content": f"Observation: {observation}"}
-        )
+        messages.append({"role": "user", "content": f"Observation: {observation}"})
 
     return "达到最大推理步数，未能得到最终答案。"

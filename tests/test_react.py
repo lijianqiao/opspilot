@@ -1,7 +1,7 @@
 import pytest
 
 from opspilot.agent.react import run_react
-from opspilot.tools.registry import _registry, ToolInfo
+from opspilot.tools.registry import ToolInfo, _registry
 
 
 class FakeLLM:

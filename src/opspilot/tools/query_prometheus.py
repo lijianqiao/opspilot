@@ -13,9 +13,7 @@ _FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 @register_tool
 def query_prometheus(metric_name: str) -> str:
     """查询 Prometheus 指标，返回指定指标的当前值。"""
-    raw = json.loads(
-        (_FIXTURES_DIR / "prometheus_metrics.json").read_text(encoding="utf-8")
-    )
+    raw = json.loads((_FIXTURES_DIR / "prometheus_metrics.json").read_text(encoding="utf-8"))
     for metric in raw["metrics"]:
         if metric["name"] == metric_name:
             lines = [f"Metric: {metric_name}"]
