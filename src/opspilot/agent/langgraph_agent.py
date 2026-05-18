@@ -155,14 +155,16 @@ def should_continue(state: AgentState) -> str:
 # --- Graph construction ---
 
 
-def _build_graph() -> Any:
-    """Build the ReAct StateGraph: START → agent → (tools → agent | end)."""
+def _build_graph(checkpointer: Any | None = None) -> Any:
+    """Build the ReAct StateGraph. Optional checkpointer enables memory."""
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", tool_node)
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
     graph.add_edge("tools", "agent")
+    if checkpointer is not None:
+        return graph.compile(checkpointer=checkpointer)
     return graph.compile()
 
 
@@ -223,3 +225,46 @@ async def run_react_graph(
             return content.strip()
 
     return "未能得到最终答案。"
+
+
+def build_checkpointed_runner(checkpointer: Any) -> Any:
+    """Return an async run() bound to a checkpointer, keyed by thread_id.
+
+    Memory comes purely from the checkpointer: re-invoking with the same
+    thread_id restores prior messages, so a kill+restart resumes.
+    """
+    compiled = _build_graph(checkpointer)
+
+    async def _run(question: str, llm: SupportsChat, thread_id: str, max_steps: int = 5) -> str:
+        system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
+        _current_llm.set(llm)
+        config = {"configurable": {"thread_id": thread_id}}
+        initial_state: dict[str, Any] = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question},
+            ],
+            "question": question,
+            "steps_taken": 0,
+            "max_steps": max_steps,
+            "tool_calls": 0,
+        }
+        result = await compiled.ainvoke(initial_state, config=config)
+        for msg in reversed(result["messages"]):
+            if msg["role"] == "assistant":
+                if final := _FINAL_RE.search(msg["content"]):
+                    return final.group(1).strip()
+                return msg["content"].strip()
+        return "未能得到最终答案。"
+
+    return _run
+
+
+def build_postgres_runner(dsn: str) -> Any:
+    """Real backend per ARCHITECTURE.md. Creates tables on first use."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    cm = PostgresSaver.from_conn_string(dsn)
+    saver = cm.__enter__()
+    saver.setup()
+    return build_checkpointed_runner(saver)
