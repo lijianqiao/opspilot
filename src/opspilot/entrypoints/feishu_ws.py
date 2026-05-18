@@ -1,4 +1,5 @@
 # pyright: reportMissingTypeStubs=false
+import logging
 import threading
 from collections.abc import Awaitable, Callable
 
@@ -14,26 +15,28 @@ from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.config import get_settings
 from opspilot.llm.client import LLMClient
 
+logger = logging.getLogger(__name__)
+
 AgentFn = Callable[[str], Awaitable[str]]
 
 
 async def handle_question(text: str, agent: AgentFn) -> str:
-    """飞书消息处理核心：纯函数，便于单测。"""
+    """Handle a Feishu message: strip, validate, delegate to agent."""
     text = text.strip()
     if not text:
-        return "请输入你的运维问题。"
+        return "Please enter your ops question."
     try:
         return await agent(text)
     except Exception as exc:
-        return f"处理问题时出错：{exc}"
+        return f"Error: {exc}"
 
 
 def _run_blocking(text: str, agent: AgentFn) -> str:
-    """在独立线程里用全新事件循环执行 handle_question。
+    """Run handle_question in a fresh event loop on a new thread.
 
-    lark-oapi 的 WS 客户端在“已运行事件循环”的线程里同步回调，
-    此处直接 anyio.run() 会触发 RuntimeError: Already running asyncio
-    in this thread。放进一个没有运行中循环的新线程即可安全执行并取回结果。
+    lark-oapi WS callbacks run on a thread that already has an event
+    loop, so anyio.run() raises RuntimeError. This helper spawns a
+    clean thread with no running loop.
     """
     box: dict[str, str] = {}
     error: dict[str, Exception] = {}
@@ -62,8 +65,26 @@ def _extract_text(event: P2ImMessageReceiveV1) -> str:
     return json.loads(content).get("text", "")
 
 
-def run() -> None:  # 手动验证，不进单测
-    """启动飞书 WS 长连接 bot。需要 OPSPILOT_FEISHU_APP_ID/SECRET。"""
+def _send_reply(chat_id: str, answer: str, settings: object) -> None:
+    """Send a text reply to a Feishu chat. Runs in a background thread."""
+    client = lark.Client.builder().app_id(settings.feishu_app_id).app_secret(settings.feishu_app_secret).build()
+    assert client.im is not None
+    client.im.v1.message.create(
+        CreateMessageRequest.builder()
+        .receive_id_type("chat_id")
+        .request_body(
+            CreateMessageRequestBody.builder()
+            .receive_id(chat_id)
+            .msg_type("text")
+            .content(lark.JSON.marshal({"text": answer}) or "{}")
+            .build()
+        )
+        .build()
+    )
+
+
+def run() -> None:  # manual verification only, not unit tested
+    """Start Feishu WS long-connection bot. Requires OPSPILOT_FEISHU_APP_ID/SECRET."""
     settings = get_settings()
 
     async def _agent(text: str) -> str:
@@ -73,26 +94,33 @@ def run() -> None:  # 手动验证，不进单测
         finally:
             await llm.aclose()
 
+    def _handle_in_background(chat_id: str, question: str) -> None:
+        """Run agent and send reply in a background thread (fire-and-forget).
+
+        The WS callback thread returns immediately so lark-oapi can
+        process ping/pong heartbeats without timeout.
+        """
+        try:
+            answer = _run_blocking(question, _agent)
+            _send_reply(chat_id, answer, settings)
+        except Exception:
+            logger.exception("Failed to handle message for chat %s", chat_id)
+
     def _on_message(event: P2ImMessageReceiveV1) -> None:
         data = event.event
         if data is None or data.message is None or data.message.chat_id is None:
             return
         question = _extract_text(event)
-        answer = _run_blocking(question, _agent)
-        client = lark.Client.builder().app_id(settings.feishu_app_id).app_secret(settings.feishu_app_secret).build()
-        assert client.im is not None
-        client.im.v1.message.create(
-            CreateMessageRequest.builder()
-            .receive_id_type("chat_id")
-            .request_body(
-                CreateMessageRequestBody.builder()
-                .receive_id(data.message.chat_id)
-                .msg_type("text")
-                .content(lark.JSON.marshal({"text": answer}) or "{}")
-                .build()
-            )
-            .build()
-        )
+        if not question:
+            return
+        # Fire-and-forget: dispatch to background thread and return immediately
+        # so the WS callback thread can keep processing heartbeats.
+        threading.Thread(
+            target=_handle_in_background,
+            args=(data.message.chat_id, question),
+            name="opspilot-feishu-agent",
+            daemon=True,
+        ).start()
 
     handler = lark.EventDispatcherHandler.builder("", "").register_p2_im_message_receive_v1(_on_message).build()
     ws = lark.ws.Client(settings.feishu_app_id, settings.feishu_app_secret, event_handler=handler)
