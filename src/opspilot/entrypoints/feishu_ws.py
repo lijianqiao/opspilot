@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 from collections.abc import Awaitable, Callable
 
@@ -20,12 +21,19 @@ logger = logging.getLogger(__name__)
 AgentFn = Callable[[str], Awaitable[str]]
 
 
+_FEISHU_MENTION_RE = re.compile(r"^@\S+\s*")
+
+
 def _select_agent(text: str) -> tuple[str, bool]:
-    """Return (stripped_text, use_plan_execute)."""
+    """Return (stripped_text, use_plan_execute).
+
+    Strips Feishu mention prefix (e.g. ``@_user_1 ``) before matching.
+    """
+    cleaned = _FEISHU_MENTION_RE.sub("", text)
     for prefix in ("规划：", "规划:", "/plan "):
-        if text.startswith(prefix):
-            return text[len(prefix) :], True
-    return text, False
+        if cleaned.startswith(prefix):
+            return cleaned[len(prefix) :], True
+    return cleaned, False
 
 
 async def handle_question(text: str, agent: AgentFn) -> str:
@@ -93,15 +101,21 @@ def _send_reply(chat_id: str, answer: str, settings: Settings) -> None:
 
 def run() -> None:  # manual verification only, not unit tested
     """Start Feishu WS long-connection bot. Requires OPSPILOT_FEISHU_APP_ID/SECRET."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     settings = get_settings()
 
     async def _agent(text: str) -> str:
         llm = LLMClient(settings)
         try:
             stripped, use_plan = _select_agent(text)
+            mode = "Plan-Execute" if use_plan else "ReAct"
+            logger.info("Agent mode: %s | question: %s", mode, stripped)
             if use_plan:
-                return await run_plan_execute(stripped, llm)
-            return await run_react_graph(stripped, llm)
+                answer = await run_plan_execute(stripped, llm)
+            else:
+                answer = await run_react_graph(stripped, llm)
+            logger.info("Answer: %s", answer[:200])
+            return answer
         finally:
             await llm.aclose()
 

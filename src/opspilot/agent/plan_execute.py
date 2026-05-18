@@ -7,9 +7,12 @@ pattern, same regex tool protocol, same guardrail-aware execution.
 
 from __future__ import annotations
 
+import logging
 import re
 from contextvars import ContextVar
 from typing import Annotated, Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
@@ -59,9 +62,11 @@ async def planner_node(state: PlanState) -> dict[str, Any]:
         f"每行一个步骤，形如 `1. ...`。任务：{state['question']}"
     )
     reply = await _llm().chat([{"role": "user", "content": prompt}])
+    logger.info("Planner reply: %s", reply[:300])
     plan = [m.group(1).strip() for m in _STEP_RE.finditer(reply)]
     if not plan:
         plan = [state["question"]]
+    logger.info("Parsed plan (%d steps): %s", len(plan), plan)
     return {"plan": plan, "cursor": 0}
 
 
@@ -74,6 +79,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
             {"role": "user", "content": f"执行这一步并给出 Final Answer：{step}"},
         ]
     )
+    logger.info("Executor reply (step %d): %s", state["cursor"], reply[:300])
     calls = state["tool_calls"]
     if (action := _ACTION_RE.search(reply)) is not None:
         calls += 1
@@ -113,6 +119,7 @@ async def replan_node(state: PlanState) -> dict[str, Any]:
             }
         ]
     )
+    logger.info("Replan reply: %s", reply[:200])
     if reply.strip().upper().startswith("REPLAN"):
         return {"final": ""}
     final = reply.strip()
@@ -123,9 +130,12 @@ async def replan_node(state: PlanState) -> dict[str, Any]:
 
 def _route_after_executor(state: PlanState) -> str:
     if state["steps_taken"] >= state["max_steps"]:
+        logger.info("Route: max_steps reached (%d), stopping", state["steps_taken"])
         return "stop"
     if state["cursor"] >= len(state["plan"]):
+        logger.info("Route: cursor >= plan length, going to replan")
         return "replan"
+    logger.info("Route: more steps in plan, continuing execute")
     return "execute"
 
 

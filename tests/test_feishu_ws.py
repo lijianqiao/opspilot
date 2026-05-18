@@ -88,3 +88,15 @@ def test_select_agent_no_prefix():
     text, use_plan = _select_agent("查看 pod")
     assert use_plan is False
     assert text == "查看 pod"
+
+
+def test_select_agent_strips_feishu_mention():
+    text, use_plan = _select_agent("@_user_1 规划：查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_strips_mention_no_plan():
+    text, use_plan = _select_agent("@_user_1 查看 pod")
+    assert use_plan is False
+    assert text == "查看 pod"
