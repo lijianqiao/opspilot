@@ -1,4 +1,3 @@
-# pyright: reportMissingTypeStubs=false
 import logging
 import threading
 from collections.abc import Awaitable, Callable
@@ -12,7 +11,7 @@ from lark_oapi.api.im.v1 import (
 )
 
 from opspilot.agent.langgraph_agent import run_react_graph
-from opspilot.config import get_settings
+from opspilot.config import Settings, get_settings
 from opspilot.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -65,7 +64,7 @@ def _extract_text(event: P2ImMessageReceiveV1) -> str:
     return json.loads(content).get("text", "")
 
 
-def _send_reply(chat_id: str, answer: str, settings: object) -> None:
+def _send_reply(chat_id: str, answer: str, settings: Settings) -> None:
     """Send a text reply to a Feishu chat. Runs in a background thread."""
     client = lark.Client.builder().app_id(settings.feishu_app_id).app_secret(settings.feishu_app_secret).build()
     assert client.im is not None
