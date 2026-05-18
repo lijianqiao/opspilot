@@ -3,6 +3,7 @@ import pytest
 
 from opspilot.entrypoints.feishu_ws import (
     _run_blocking,
+    _select_agent,
     handle_question,
 )
 
@@ -63,3 +64,27 @@ async def test_run_blocking_propagates_agent_error() -> None:
     result = _run_blocking("hi", boom)
     assert "Error" in result
     assert "agent failed" in result
+
+
+def test_select_agent_plan_prefix():
+    text, use_plan = _select_agent("规划：查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_plan_prefix_half_width():
+    text, use_plan = _select_agent("规划:查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_slash_plan():
+    text, use_plan = _select_agent("/plan 查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_no_prefix():
+    text, use_plan = _select_agent("查看 pod")
+    assert use_plan is False
+    assert text == "查看 pod"

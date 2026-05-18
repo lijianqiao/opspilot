@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 AgentFn = Callable[[str], Awaitable[str]]
 
 
+def _select_agent(text: str) -> tuple[str, bool]:
+    """Return (stripped_text, use_plan_execute)."""
+    for prefix in ("规划：", "规划:", "/plan "):
+        if text.startswith(prefix):
+            return text[len(prefix):], True
+    return text, False
+
+
 async def handle_question(text: str, agent: AgentFn) -> str:
     """Handle a Feishu message: strip, validate, delegate to agent."""
     text = text.strip()
@@ -90,10 +98,10 @@ def run() -> None:  # manual verification only, not unit tested
     async def _agent(text: str) -> str:
         llm = LLMClient(settings)
         try:
-            for prefix in ("规划：", "规划:", "/plan "):
-                if text.startswith(prefix):
-                    return await run_plan_execute(text[len(prefix) :], llm)
-            return await run_react_graph(text, llm)
+            stripped, use_plan = _select_agent(text)
+            if use_plan:
+                return await run_plan_execute(stripped, llm)
+            return await run_react_graph(stripped, llm)
         finally:
             await llm.aclose()
 
