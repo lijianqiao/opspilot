@@ -1,0 +1,25 @@
+{
+  "metrics": [
+    {
+      "name": "container_cpu_usage_seconds_total",
+      "data": [
+        {"metric": {"namespace": "default", "pod": "order-service-5c7b9d-klmno"}, "value": [1716000000, "0.95"]},
+        {"metric": {"namespace": "default", "pod": "user-service-7d9f8c-abcde"}, "value": [1716000000, "0.12"]}
+      ]
+    },
+    {
+      "name": "container_memory_working_set_bytes",
+      "data": [
+        {"metric": {"namespace": "default", "pod": "order-service-5c7b9d-klmno"}, "value": [1716000000, "268435456"]},
+        {"metric": {"namespace": "default", "pod": "user-service-7d9f8c-abcde"}, "value": [1716000000, "134217728"]}
+      ]
+    },
+    {
+      "name": "kube_pod_container_status_restarts_total",
+      "data": [
+        {"metric": {"namespace": "default", "pod": "order-service-5c7b9d-klmno"}, "value": [1716000000, "7"]},
+        {"metric": {"namespace": "default", "pod": "user-service-7d9f8c-abcde"}, "value": [1716000000, "0"]}
+      ]
+    }
+  ]
+}
