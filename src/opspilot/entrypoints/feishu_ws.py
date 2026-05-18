@@ -10,7 +10,7 @@ from lark_oapi.api.im.v1 import (
     P2ImMessageReceiveV1,
 )
 
-from opspilot.agent.react import run_react
+from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.config import get_settings
 from opspilot.llm.client import LLMClient
 
@@ -69,7 +69,7 @@ def run() -> None:  # 手动验证，不进单测
     async def _agent(text: str) -> str:
         llm = LLMClient(settings)
         try:
-            return await run_react(text, llm)
+            return await run_react_graph(text, llm)
         finally:
             await llm.aclose()
 

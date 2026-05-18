@@ -1,7 +1,7 @@
 import anyio
 import typer
 
-from opspilot.agent.react import run_react
+from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.config import get_settings
 from opspilot.llm.client import LLMClient
 
@@ -20,7 +20,7 @@ def ask(question: str) -> None:
     async def _run() -> str:
         llm = LLMClient(get_settings())
         try:
-            return await run_react(question, llm)
+            return await run_react_graph(question, llm)
         finally:
             await llm.aclose()
 
