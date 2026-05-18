@@ -11,8 +11,8 @@ from lark_oapi.api.im.v1 import (
     P2ImMessageReceiveV1,
 )
 
-from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.agent.plan_execute import run_plan_execute
+from opspilot.agent.supervisor import run_supervisor
 from opspilot.config import Settings, get_settings
 from opspilot.llm.client import LLMClient
 
@@ -108,14 +108,11 @@ def run() -> None:  # manual verification only, not unit tested
         llm = LLMClient(settings)
         try:
             stripped, use_plan = _select_agent(text)
-            mode = "Plan-Execute" if use_plan else "ReAct"
-            logger.info("Agent mode: %s | question: %s", mode, stripped)
             if use_plan:
-                answer = await run_plan_execute(stripped, llm)
-            else:
-                answer = await run_react_graph(stripped, llm)
-            logger.info("Answer: %s", answer[:200])
-            return answer
+                logger.info("Agent mode: Plan-Execute (direct) | question: %s", stripped)
+                return await run_plan_execute(stripped, llm)
+            logger.info("Agent mode: Supervisor | question: %s", stripped)
+            return await run_supervisor(stripped, llm)
         finally:
             await llm.aclose()
 

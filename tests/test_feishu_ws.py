@@ -100,3 +100,15 @@ def test_select_agent_strips_mention_no_plan():
     text, use_plan = _select_agent("@_user_1 查看 pod")
     assert use_plan is False
     assert text == "查看 pod"
+
+
+def test_select_agent_routes_normal_message_to_default():
+    text, use_plan = _select_agent("查看 pod 状态")
+    assert use_plan is False
+    assert text == "查看 pod 状态"
+
+
+def test_select_agent_preserves_plan_prefix_behavior():
+    text, use_plan = _select_agent("规划：重启 order-service")
+    assert use_plan is True
+    assert text == "重启 order-service"
