@@ -24,7 +24,7 @@ def _select_agent(text: str) -> tuple[str, bool]:
     """Return (stripped_text, use_plan_execute)."""
     for prefix in ("规划：", "规划:", "/plan "):
         if text.startswith(prefix):
-            return text[len(prefix):], True
+            return text[len(prefix) :], True
     return text, False
 
 

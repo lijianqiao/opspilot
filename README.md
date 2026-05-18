@@ -59,3 +59,19 @@ uv run opspilot ask "default 有哪些 pod 不正常"
 ```
 
 > 未启动 llama.cpp 时会报连接错误，属预期——核心逻辑已被单测覆盖（`uv run pytest -v`，13 passed）。
+
+### Stage 2 新增能力
+
+```bash
+# Plan-Execute 模式：先规划步骤再逐步执行（复杂多步任务）
+uv run opspilot ask "default 有哪些 pod 不正常" --plan
+
+# 最小 Eval：一条命令出 10-case 分数表（无需 llama.cpp，CI 友好）
+uv run python scripts/run_eval.py
+
+# Postgres Memory：断点续跑（需 Docker）
+docker compose -f infra/docker-compose.yml up -d
+export OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@localhost:5432/opspilot
+```
+
+详见 [阶段 2 总结文档](docs/stages/stage2_agent_advanced.md)。
