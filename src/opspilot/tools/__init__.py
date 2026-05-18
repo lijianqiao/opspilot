@@ -1,9 +1,11 @@
 from opspilot.tools.confirm import confirm_dangerous_op
 from opspilot.tools.kubectl_ops import kubectl_describe, kubectl_get
 from opspilot.tools.kubectl_write import kubectl_rollout_restart, kubectl_scale
+from opspilot.tools.log_tools import aggregate_errors, tail_pod_logs
 from opspilot.tools.pod_status import get_pod_status
 from opspilot.tools.query_loki import query_loki
 from opspilot.tools.query_prometheus import query_prometheus
+from opspilot.tools.runbook import retrieve_runbook
 from opspilot.tools.registry import (
     ToolInfo,
     build_tools_prompt,
@@ -14,6 +16,7 @@ from opspilot.tools.registry import (
 
 __all__ = [
     "ToolInfo",
+    "aggregate_errors",
     "build_tools_prompt",
     "call_tool",
     "confirm_dangerous_op",
@@ -26,4 +29,6 @@ __all__ = [
     "query_loki",
     "query_prometheus",
     "register_tool",
+    "retrieve_runbook",
+    "tail_pod_logs",
 ]
