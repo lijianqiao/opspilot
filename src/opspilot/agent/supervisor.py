@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from contextvars import ContextVar
-from typing import Annotated, Any, Protocol
+from typing import Any, Protocol
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
@@ -28,8 +28,14 @@ _INTENT_RE = re.compile(r"INTENT:\s*(\S+)", re.IGNORECASE)
 
 # Tool sets per agent type
 _LOG_ANALYZER_TOOLS = {"query_loki", "kubectl_get", "query_prometheus", "aggregate_errors", "tail_pod_logs"}
-_K8S_OPERATOR_TOOLS = {"kubectl_get", "kubectl_describe", "kubectl_scale",
-                       "kubectl_rollout_restart", "confirm_dangerous_op", "query_prometheus"}
+_K8S_OPERATOR_TOOLS = {
+    "kubectl_get",
+    "kubectl_describe",
+    "kubectl_scale",
+    "kubectl_rollout_restart",
+    "confirm_dangerous_op",
+    "query_prometheus",
+}
 _GENERIC_TOOLS = {"get_pod_status", "kubectl_get", "kubectl_describe", "query_loki", "query_prometheus"}
 
 

@@ -75,3 +75,22 @@ export OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@localhost:5432/opspilot
 ```
 
 详见 [阶段 2 总结文档](docs/stages/stage2_agent_advanced.md)。
+
+### Stage 3 新增能力 — 多智能体 Supervisor
+
+```bash
+# Supervisor 自动路由（普通消息走 Supervisor 分类 → 子 Agent）
+uv run opspilot ask "查一下 user-service 的错误日志"
+
+# Alert Handler HTTP 端点（接收 Alertmanager webhook）
+uv run uvicorn opspilot.entrypoints.alert_webhook:app --port 8000
+curl -X POST http://localhost:8000/alert \
+  -H "Content-Type: application/json" \
+  -d @fixtures/alertmanager_webhook.json
+
+# 飞书交互卡片确认（危险操作二次确认，仅飞书入口触发）
+# Eval 已扩展至 15 cases
+uv run python scripts/run_eval.py
+```
+
+详见 [阶段 3 总结文档](docs/stages/stage3_multi_agent.md)。

@@ -46,7 +46,9 @@ async def handle_alert(payload: dict[str, Any], llm: SupportsChat) -> str:
     ctx = _extract_context(payload)
     logger.info(
         "Alert received: %s/%s severity=%s",
-        ctx["alertname"], ctx["service"], ctx["severity"],
+        ctx["alertname"],
+        ctx["service"],
+        ctx["severity"],
     )
 
     # 1. Gather evidence: logs + runbook

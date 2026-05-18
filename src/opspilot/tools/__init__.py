@@ -5,7 +5,6 @@ from opspilot.tools.log_tools import aggregate_errors, tail_pod_logs
 from opspilot.tools.pod_status import get_pod_status
 from opspilot.tools.query_loki import query_loki
 from opspilot.tools.query_prometheus import query_prometheus
-from opspilot.tools.runbook import retrieve_runbook
 from opspilot.tools.registry import (
     ToolInfo,
     build_tools_prompt,
@@ -13,6 +12,7 @@ from opspilot.tools.registry import (
     get_registered_tools,
     register_tool,
 )
+from opspilot.tools.runbook import retrieve_runbook
 
 __all__ = [
     "ToolInfo",

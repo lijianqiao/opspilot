@@ -19,9 +19,7 @@ def test_alert_endpoint_returns_diagnosis(client, monkeypatch):
     async def fake_handle(payload, llm):
         return "诊断结果：测试告警已处理。"
 
-    monkeypatch.setattr(
-        "opspilot.entrypoints.alert_webhook.handle_alert", fake_handle
-    )
+    monkeypatch.setattr("opspilot.entrypoints.alert_webhook.handle_alert", fake_handle)
 
     response = client.post("/alert", json=fixture)
     assert response.status_code == 200
@@ -34,9 +32,7 @@ def test_alert_endpoint_handles_error(client, monkeypatch):
     async def fake_handle(payload, llm):
         raise RuntimeError("LLM down")
 
-    monkeypatch.setattr(
-        "opspilot.entrypoints.alert_webhook.handle_alert", fake_handle
-    )
+    monkeypatch.setattr("opspilot.entrypoints.alert_webhook.handle_alert", fake_handle)
 
     response = client.post("/alert", json={"alerts": []})
     assert response.status_code == 200
