@@ -11,6 +11,7 @@ from lark_oapi.api.im.v1 import (
 )
 
 from opspilot.agent.langgraph_agent import run_react_graph
+from opspilot.agent.plan_execute import run_plan_execute
 from opspilot.config import Settings, get_settings
 from opspilot.llm.client import LLMClient
 
@@ -89,6 +90,9 @@ def run() -> None:  # manual verification only, not unit tested
     async def _agent(text: str) -> str:
         llm = LLMClient(settings)
         try:
+            for prefix in ("规划：", "规划:", "/plan "):
+                if text.startswith(prefix):
+                    return await run_plan_execute(text[len(prefix) :], llm)
             return await run_react_graph(text, llm)
         finally:
             await llm.aclose()
