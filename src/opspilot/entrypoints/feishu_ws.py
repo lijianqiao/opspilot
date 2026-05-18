@@ -22,7 +22,10 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     text = text.strip()
     if not text:
         return "请输入你的运维问题。"
-    return await agent(text)
+    try:
+        return await agent(text)
+    except Exception as exc:
+        return f"处理问题时出错：{exc}"
 
 
 def _run_blocking(text: str, agent: AgentFn) -> str:
