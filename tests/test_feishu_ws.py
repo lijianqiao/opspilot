@@ -3,6 +3,7 @@ import pytest
 
 from opspilot.entrypoints.feishu_ws import (
     _run_blocking,
+    _select_agent,
     handle_question,
 )
 
@@ -20,7 +21,7 @@ async def test_handle_question_rejects_empty() -> None:
     async def agent(text: str) -> str:
         raise AssertionError("空输入不应调用 agent")
 
-    assert "请输入" in await handle_question("   ", agent)
+    assert "Please enter" in await handle_question("   ", agent)
 
 
 @pytest.mark.anyio
@@ -29,15 +30,14 @@ async def test_handle_question_returns_error_message_on_agent_failure() -> None:
         raise RuntimeError("LLM connection refused")
 
     result = await handle_question("pod 状态", boom)
-    assert "出错" in result
+    assert "Error" in result
     assert "LLM connection refused" in result
 
 
 @pytest.mark.anyio
 async def test_bare_anyio_run_fails_inside_running_loop() -> None:
-    # 复现根因：lark WS 回调跑在“已有运行中事件循环”的线程里，
-    # 此时直接 anyio.run() 必抛 RuntimeError: Already running asyncio。
-    # 本测试本身就跑在 anyio 事件循环里，正好复现该环境。
+    # Reproduce root cause: lark WS callback runs on a thread with an
+    # existing event loop, so anyio.run() raises RuntimeError.
     async def agent(text: str) -> str:
         return text
 
@@ -47,7 +47,7 @@ async def test_bare_anyio_run_fails_inside_running_loop() -> None:
 
 @pytest.mark.anyio
 async def test_run_blocking_works_inside_running_loop() -> None:
-    # 与上面相同的“已有运行循环”环境，_run_blocking 必须正常返回。
+    # Same running-loop environment; _run_blocking must succeed.
     async def agent(text: str) -> str:
         return f"answered: {text}"
 
@@ -62,5 +62,29 @@ async def test_run_blocking_propagates_agent_error() -> None:
     # handle_question now catches errors and returns a user-friendly message
     # instead of propagating the exception.
     result = _run_blocking("hi", boom)
-    assert "出错" in result
+    assert "Error" in result
     assert "agent failed" in result
+
+
+def test_select_agent_plan_prefix():
+    text, use_plan = _select_agent("规划：查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_plan_prefix_half_width():
+    text, use_plan = _select_agent("规划:查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_slash_plan():
+    text, use_plan = _select_agent("/plan 查看 pod")
+    assert use_plan is True
+    assert text == "查看 pod"
+
+
+def test_select_agent_no_prefix():
+    text, use_plan = _select_agent("查看 pod")
+    assert use_plan is False
+    assert text == "查看 pod"

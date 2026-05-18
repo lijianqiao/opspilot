@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_type_hints
+from typing import Any, get_type_hints, overload
 
 # Module-level registry — populated by @register_tool
 _registry: dict[str, ToolInfo] = {}
@@ -30,6 +30,7 @@ class ToolInfo:
     description: str
     func: Callable[..., str]
     parameters: dict[str, Any] = field(default_factory=dict)
+    risk: str = "low"
 
 
 def _infer_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
@@ -63,8 +64,18 @@ def _infer_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
     }
 
 
+@overload
+def register_tool(func: Callable[..., str], /) -> Callable[..., str]: ...
+
+
+@overload
 def register_tool(
-    func: Callable[..., str] | None = None, *, name: str | None = None
+    func: None = None, *, name: str | None = None, risk: str = "low"
+) -> Callable[[Callable[..., str]], Callable[..., str]]: ...
+
+
+def register_tool(
+    func: Callable[..., str] | None = None, *, name: str | None = None, risk: str = "low"
 ) -> Callable[..., str] | Callable[[Callable[..., str]], Callable[..., str]]:
     """Decorator to register a function as an OpsPilot tool.
 
@@ -84,6 +95,7 @@ def register_tool(
             description=doc.split("\n")[0],  # first line only
             func=f,
             parameters=_infer_json_schema(f),
+            risk=risk,
         )
         _registry[tool_name] = info
         return f

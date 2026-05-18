@@ -13,10 +13,20 @@ from opspilot.tools.registry import (
 
 @pytest.fixture(autouse=True)
 def _clear_registry() -> None:
-    """Ensure each test starts and ends with an empty registry."""
+    """Isolate each test with an empty registry, then restore the real one.
+
+    Previously this cleared the global registry on teardown and never
+    restored it, which permanently wiped the production tool
+    registrations for every test that ran afterwards in the session
+    (e.g. is_dangerous() could no longer see kubectl_scale's high
+    risk). Snapshot/restore keeps these tests isolated without
+    leaking that state into the rest of the suite.
+    """
+    saved = dict(_registry)
     _registry.clear()
     yield
     _registry.clear()
+    _registry.update(saved)
 
 
 def test_register_tool_adds_to_registry() -> None:

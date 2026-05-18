@@ -1,0 +1,6 @@
+{
+  "deployments": [
+    {"name": "user-service", "namespace": "default", "replicas": 3},
+    {"name": "order-service", "namespace": "default", "replicas": 2}
+  ]
+}
