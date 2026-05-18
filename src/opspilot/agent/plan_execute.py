@@ -58,8 +58,9 @@ def _llm() -> SupportsChat:
 
 async def planner_node(state: PlanState) -> dict[str, Any]:
     prompt = (
-        f"你是运维助手 OpsPilot 的规划器。把用户任务拆成有序步骤，"
-        f"每行一个步骤，形如 `1. ...`。任务：{state['question']}"
+        f"请把以下运维任务拆成 1-3 个编号步骤，每行一个，格式如：1. 查看pod状态\n2. 总结结果\n\n"
+        f"任务：{state['question']}\n\n"
+        f"只输出编号步骤，不要输出其他内容。"
     )
     reply = await _llm().chat([{"role": "user", "content": prompt}])
     logger.info("Planner reply: %s", reply[:300])
@@ -76,7 +77,15 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
     reply = await _llm().chat(
         [
             {"role": "system", "content": sys},
-            {"role": "user", "content": f"执行这一步并给出 Final Answer：{step}"},
+            {
+                "role": "user",
+                "content": (
+                    f"请执行以下任务，直接调用合适的工具获取信息。\n\n"
+                    f"任务：{step}\n\n"
+                    f"请直接输出 Action 和 Action Input 来调用工具，或直接输出 Final Answer。"
+                    f"不要输出思考过程，不要输出模板，直接行动。"
+                ),
+            },
         ]
     )
     logger.info("Executor reply (step %d): %s", state["cursor"], reply[:300])
@@ -112,9 +121,9 @@ async def replan_node(state: PlanState) -> dict[str, Any]:
             {
                 "role": "user",
                 "content": (
-                    f"任务：{state['question']}\n已完成：\n{summary}\n"
-                    "如果任务已完成，回复以 DONE 开头并给出最终答案；"
-                    "如果还需要更多步骤，只回复 REPLAN。"
+                    f"任务：{state['question']}\n\n已完成的步骤：\n{summary}\n\n"
+                    f"请只回复一个单词：DONE（如果任务已完成）或 REPLAN（如果需要更多步骤）。"
+                    f"不要输出分析过程。如果回复 DONE，请在同一行后面跟上最终答案。"
                 ),
             }
         ]
