@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, get_type_hints
+from typing import Any, get_type_hints, overload
 
 # Module-level registry — populated by @register_tool
 _registry: dict[str, ToolInfo] = {}
@@ -62,6 +62,16 @@ def _infer_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
         "properties": properties,
         "required": required,
     }
+
+
+@overload
+def register_tool(func: Callable[..., str], /) -> Callable[..., str]: ...
+
+
+@overload
+def register_tool(
+    func: None = None, *, name: str | None = None, risk: str = "low"
+) -> Callable[[Callable[..., str]], Callable[..., str]]: ...
 
 
 def register_tool(
