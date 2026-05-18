@@ -155,3 +155,42 @@ def test_call_tool_execution_error() -> None:
     result = call_tool("bad_tool", "test")
     assert "工具执行错误" in result
     assert "something broke" in result
+
+
+def test_build_tools_prompt_with_filter() -> None:
+    @register_tool
+    def get_pod_status(namespace: str) -> str:
+        """Get pod status."""
+        return namespace
+
+    @register_tool
+    def query_loki(query: str) -> str:
+        """Query Loki logs."""
+        return query
+
+    @register_tool
+    def kubectl_scale(name: str, replicas: int) -> str:
+        """Scale a deployment."""
+        return f"{name}:{replicas}"
+
+    prompt = build_tools_prompt(tool_filter={"get_pod_status", "query_loki"})
+    assert "get_pod_status" in prompt
+    assert "query_loki" in prompt
+    # kubectl_scale should NOT be in the filtered prompt
+    assert "kubectl_scale" not in prompt
+
+
+def test_build_tools_prompt_filter_empty_set_returns_all() -> None:
+    @register_tool
+    def get_pod_status(namespace: str) -> str:
+        """Get pod status."""
+        return namespace
+
+    @register_tool
+    def query_loki(query: str) -> str:
+        """Query Loki logs."""
+        return query
+
+    prompt = build_tools_prompt(tool_filter=set())
+    assert "get_pod_status" in prompt
+    assert "query_loki" in prompt
