@@ -1,4 +1,5 @@
 # pyright: reportMissingTypeStubs=false
+import threading
 from collections.abc import Awaitable, Callable
 
 import anyio
@@ -22,6 +23,30 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     if not text:
         return "请输入你的运维问题。"
     return await agent(text)
+
+
+def _run_blocking(text: str, agent: AgentFn) -> str:
+    """在独立线程里用全新事件循环执行 handle_question。
+
+    lark-oapi 的 WS 客户端在“已运行事件循环”的线程里同步回调，
+    此处直接 anyio.run() 会触发 RuntimeError: Already running asyncio
+    in this thread。放进一个没有运行中循环的新线程即可安全执行并取回结果。
+    """
+    box: dict[str, str] = {}
+    error: dict[str, Exception] = {}
+
+    def _worker() -> None:
+        try:
+            box["answer"] = anyio.run(handle_question, text, agent)
+        except Exception as exc:
+            error["exc"] = exc
+
+    thread = threading.Thread(target=_worker, name="opspilot-feishu-agent")
+    thread.start()
+    thread.join()
+    if "exc" in error:
+        raise error["exc"]
+    return box["answer"]
 
 
 def _extract_text(event: P2ImMessageReceiveV1) -> str:
@@ -50,7 +75,7 @@ def run() -> None:  # 手动验证，不进单测
         if data is None or data.message is None or data.message.chat_id is None:
             return
         question = _extract_text(event)
-        answer = anyio.run(handle_question, question, _agent)
+        answer = _run_blocking(question, _agent)
         client = lark.Client.builder().app_id(settings.feishu_app_id).app_secret(settings.feishu_app_secret).build()
         assert client.im is not None
         client.im.v1.message.create(
