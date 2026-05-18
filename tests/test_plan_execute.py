@@ -53,8 +53,9 @@ async def test_replan_can_request_more_steps() -> None:
 @pytest.mark.anyio
 async def test_max_steps_guards_plan_execute() -> None:
     # Call order per cycle: planner, executor, replan.
-    # With max_steps=3, the replan guard triggers after 3 executor runs
-    # (steps_taken=3 >= max_steps=3), so replan doesn't call LLM on cycle 3.
+    # With max_steps=3, _route_after_executor routes to END (not replan)
+    # after the 3rd executor run because steps_taken=3 >= max_steps.
+    # run_plan_execute's fallback returns the "达到最大步数" message.
     # Total LLM calls: 3 planners + 3 executors + 2 replans = 8.
     action = "Action: kubectl_get\nAction Input: pods"
     llm = FakeLLM(
@@ -66,7 +67,7 @@ async def test_max_steps_guards_plan_execute() -> None:
         + ["REPLAN"]  # replan (cycle 2)
         + ["1. 永远做不完"]  # planner (cycle 3)
         + [action]  # executor (cycle 3)
-        # replan (cycle 3): guard triggers, no LLM call
+        # _route_after_executor sends to END; replan is never entered
     )
     answer = await run_plan_execute("infinite", llm, max_steps=3)
     assert "达到最大" in answer

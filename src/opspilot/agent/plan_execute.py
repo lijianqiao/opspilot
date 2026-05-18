@@ -100,10 +100,6 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
 
 
 async def replan_node(state: PlanState) -> dict[str, Any]:
-    # Guard: if we already hit max steps, stop before calling LLM.
-    if state["steps_taken"] >= state["max_steps"]:
-        last = state["results"][-1]["result"] if state["results"] else "任务未完成。"
-        return {"final": f"达到最大步数，任务未完成。{last}"}
     summary = "\n".join(f"- {r['step']}: {r['result']}" for r in state["results"])
     reply = await _llm().chat(
         [
