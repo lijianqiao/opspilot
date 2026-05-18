@@ -41,3 +41,21 @@ cd opspilot
 
 # 运行入口（占位）
 python main.py
+```
+
+## Quickstart
+
+跑通第一条纵切（CLI → 手写 ReAct → mock 工具，基于 fixture 回答）只需 3 步。详见 [阶段 0 总结文档](docs/stages/stage0_foundation.md)。
+
+```bash
+# 1. 安装依赖（一键创建 .venv 并锁定）
+uv sync
+
+# 2. 另开终端，启动本地 llama.cpp（OpenAI 兼容 server，:8080；模型路径换成你本地的 GGUF）
+./llama-server -m /path/to/Qwen3.5-9B.Q4_K_M.gguf --port 8080
+
+# 3. 提一个运维问题
+uv run opspilot ask "default 有哪些 pod 不正常"
+```
+
+> 未启动 llama.cpp 时会报连接错误，属预期——核心逻辑已被单测覆盖（`uv run pytest -v`，13 passed）。

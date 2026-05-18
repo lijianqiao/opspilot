@@ -22,8 +22,8 @@ wheels/
 .env
 .venv/
 
-# docs files
-docs/
+# internal planning/scratch docs (not part of the portfolio)
+docs/superpowers/
 
 # vscode
 .vscode/
