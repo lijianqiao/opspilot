@@ -47,6 +47,7 @@ class PlanState(TypedDict):
 
 
 _current_llm: ContextVar[SupportsChat] = ContextVar("_pe_current_llm")
+_pe_tool_filter: ContextVar[set[str] | None] = ContextVar("_pe_tool_filter", default=None)
 
 
 def _llm() -> SupportsChat:
@@ -78,7 +79,7 @@ async def planner_node(state: PlanState) -> dict[str, Any]:
 
 async def executor_node(state: PlanState) -> dict[str, Any]:
     step = state["plan"][state["cursor"]]
-    sys = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
+    sys = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=_pe_tool_filter.get())}"
     reply = await _llm().chat(
         [
             {"role": "system", "content": sys},
@@ -178,9 +179,10 @@ def _build_graph() -> Any:
 _compiled = _build_graph()
 
 
-async def run_plan_execute(question: str, llm: SupportsChat, max_steps: int = 8) -> str:
+async def run_plan_execute(question: str, llm: SupportsChat, max_steps: int = 8, tool_filter: set[str] | None = None) -> str:
     """Run the Plan-Execute loop. API-shaped like run_react_graph()."""
     _current_llm.set(llm)
+    _pe_tool_filter.set(tool_filter)
     init: dict[str, Any] = {
         "question": question,
         "plan": [],

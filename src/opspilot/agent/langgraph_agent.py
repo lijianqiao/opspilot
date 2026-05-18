@@ -176,6 +176,7 @@ async def run_react_graph(
     question: str,
     llm: SupportsChat,
     max_steps: int = 5,
+    tool_filter: set[str] | None = None,
 ) -> str:
     """Run the ReAct loop via LangGraph StateGraph.
 
@@ -183,7 +184,7 @@ async def run_react_graph(
     outputs. The difference is internal: uses a compiled StateGraph
     with conditional edges instead of a for-loop.
     """
-    system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
+    system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=tool_filter)}"
 
     _current_llm.set(llm)
 
