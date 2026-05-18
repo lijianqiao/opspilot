@@ -19,6 +19,8 @@ TYPE_MAP: dict[type, str] = {
     bool: "boolean",
 }
 
+_SCHEMA_TYPE_TO_PYTHON: dict[str, type] = {v: k for k, v in TYPE_MAP.items()}
+
 
 @dataclass(frozen=True)
 class ToolInfo:
@@ -159,15 +161,24 @@ def call_tool(name: str, raw_input: str) -> str:
         except (json.JSONDecodeError, TypeError):
             pass
 
+        # Fallback: coerce raw_input to the parameter's annotated type
+        def _coerce(value: str, param_name: str) -> Any:
+            props = info.parameters.get("properties", {})
+            schema_type = props.get(param_name, {}).get("type", "string")
+            python_type = _SCHEMA_TYPE_TO_PYTHON.get(schema_type, str)
+            if python_type is bool:
+                return value.lower() in ("true", "1", "yes")
+            return python_type(value)
+
         # Fallback: single required param → pass as that param
         required = info.parameters.get("required", [])
         if len(required) == 1:
-            return info.func(**{required[0]: raw_input})
+            return info.func(**{required[0]: _coerce(raw_input, required[0])})
 
         # Fallback: first positional arg
         params = list(info.parameters.get("properties", {}).keys())
         if params:
-            return info.func(**{params[0]: raw_input})
+            return info.func(**{params[0]: _coerce(raw_input, params[0])})
 
         return info.func(raw_input)
     except Exception as e:
