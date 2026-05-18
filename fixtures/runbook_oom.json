@@ -1,0 +1,11 @@
+{
+  "name": "OOM 故障排查",
+  "keywords": ["OOM", "out of memory", "OOMKilled", "内存溢出"],
+  "steps": [
+    "1. 检查 pod 资源限制：kubectl describe pod <pod-name> | grep -A5 Limits",
+    "2. 查看 OOM 时间点日志：kubectl logs <pod-name> --previous --tail=200",
+    "3. 检查节点资源：kubectl top nodes",
+    "4. 常见原因：内存泄漏、JVM heap 配置不足、并发请求突增、Cgroup limit 过低",
+    "5. 临时措施：增加 memory limit 或扩容副本；长期：优化代码或调整 JVM 参数"
+  ]
+}

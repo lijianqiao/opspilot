@@ -1,0 +1,26 @@
+{
+  "receiver": "opspilot",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "PodCrashLooping",
+        "namespace": "default",
+        "pod": "order-service-5c7b9d-klmno",
+        "severity": "critical",
+        "service": "order-service"
+      },
+      "annotations": {
+        "summary": "Pod order-service-5c7b9d-klmno is crash looping",
+        "description": "Pod has restarted 5 times in the last 10 minutes",
+        "runbook_url": "http://wiki.internal/runbooks/pod-crashloop"
+      },
+      "startsAt": "2026-05-18T08:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "groupLabels": {"alertname": "PodCrashLooping"},
+  "commonLabels": {"severity": "critical"},
+  "externalURL": "http://alertmanager.internal:9093"
+}

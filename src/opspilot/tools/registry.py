@@ -110,13 +110,22 @@ def get_registered_tools() -> dict[str, ToolInfo]:
     return dict(_registry)
 
 
-def build_tools_prompt() -> str:
+def build_tools_prompt(tool_filter: set[str] | None = None) -> str:
     """Auto-generate the tools section of the system prompt from registry.
 
     Produces a description block for each registered tool so the LLM
     knows what's available, what arguments to pass, and in what format.
+
+    Args:
+        tool_filter: Optional set of tool names to include. If None or empty,
+                     all registered tools are included.
     """
     tools = get_registered_tools()
+
+    # Filter: only include tools in tool_filter (if specified and non-empty)
+    if tool_filter:
+        tools = {k: v for k, v in tools.items() if k in tool_filter}
+
     if not tools:
         return "当前没有可用工具。"
 

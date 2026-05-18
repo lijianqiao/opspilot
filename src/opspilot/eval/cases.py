@@ -124,4 +124,53 @@ CASES: list[EvalCase] = [
         expected_tool_sequence=["kubectl_get"],
         answer_keywords=["脱敏"],
     ),
+    EvalCase(
+        name="stage3_log_query_routed_to_log_analyzer",
+        question="查一下 user-service 最近的错误日志",
+        scripted_replies=[
+            "Action: aggregate_errors\nAction Input: user-service",
+            "Final Answer: user-service 最近有 23 次 NullPointerException。",
+        ],
+        expected_tool_sequence=["aggregate_errors"],
+        answer_keywords=["NullPointerException"],
+    ),
+    EvalCase(
+        name="stage3_k8s_query_routed_to_k8s_operator",
+        question="order-service 有几个 pod",
+        scripted_replies=[
+            "Action: kubectl_get\nAction Input: pods",
+            "Final Answer: order-service 有 3 个 pod。",
+        ],
+        expected_tool_sequence=["kubectl_get"],
+        answer_keywords=["3", "pod"],
+    ),
+    EvalCase(
+        name="stage3_unknown_intent_falls_back",
+        question="今天天气怎么样",
+        scripted_replies=[
+            "Final Answer: 我无法回答天气问题，请提出运维相关问题。",
+        ],
+        expected_tool_sequence=[],
+        answer_keywords=["运维"],
+    ),
+    EvalCase(
+        name="stage3_runbook_retrieval",
+        question="OOMKilled 怎么排查",
+        scripted_replies=[
+            "Action: retrieve_runbook\nAction Input: OOMKilled 怎么排查",
+            "Final Answer: 请参考上述 Runbook 步骤排查 OOM 问题。",
+        ],
+        expected_tool_sequence=["retrieve_runbook"],
+        answer_keywords=["OOM", "Runbook"],
+    ),
+    EvalCase(
+        name="stage3_alert_diagnosis_includes_runbook",
+        question="处理一个 CrashLoopBackOff 告警",
+        scripted_replies=[
+            "Action: retrieve_runbook\nAction Input: CrashLoopBackOff",
+            "Final Answer: 根据 Runbook，CrashLoopBackOff 需排查启动命令和依赖服务。",
+        ],
+        expected_tool_sequence=["retrieve_runbook"],
+        answer_keywords=["CrashLoopBackOff", "Runbook"],
+    ),
 ]

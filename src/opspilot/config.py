@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     llm_api_key: str = "sk-local"
     feishu_app_id: str = ""
     feishu_app_secret: str = ""
+    feishu_verification_token: str = ""
     agent_max_tool_calls: int = 8
     pg_dsn: str = "postgresql://opspilot:opspilot@localhost:5432/opspilot"
 
