@@ -16,7 +16,7 @@ class FakeLLM:
 
 
 @pytest.mark.anyio
-async def test_thread_memory_persists_across_calls_inmemory() -> None:
+async def test_checkpoint_preserves_message_history() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
 
     run = build_checkpointed_runner(InMemorySaver())
@@ -58,7 +58,10 @@ async def test_thread_memory_persists_across_calls_inmemory() -> None:
 async def test_postgres_checkpointer_smoke() -> None:
     from opspilot.agent.langgraph_agent import build_postgres_runner
 
-    run = build_postgres_runner(os.environ["OPSPILOT_PG_DSN"])
-    llm = FakeLLM(["Final Answer: pg ok"])
-    out = await run("ping", llm, thread_id="pg-smoke")
-    assert "pg ok" in out
+    run, cm = build_postgres_runner(os.environ["OPSPILOT_PG_DSN"])
+    try:
+        llm = FakeLLM(["Final Answer: pg ok"])
+        out = await run("ping", llm, thread_id="pg-smoke")
+        assert "pg ok" in out
+    finally:
+        cm.__exit__(None, None, None)

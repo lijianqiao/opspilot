@@ -260,11 +260,15 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
     return _run
 
 
-def build_postgres_runner(dsn: str) -> Any:
-    """Real backend per ARCHITECTURE.md. Creates tables on first use."""
+def build_postgres_runner(dsn: str) -> tuple[Any, Any]:
+    """Real backend per ARCHITECTURE.md. Creates tables on first use.
+
+    Returns (run_fn, context_manager). Caller must call
+    context_manager.__exit__(None, None, None) on shutdown.
+    """
     from langgraph.checkpoint.postgres import PostgresSaver
 
     cm = PostgresSaver.from_conn_string(dsn)
     saver = cm.__enter__()
     saver.setup()
-    return build_checkpointed_runner(saver)
+    return build_checkpointed_runner(saver), cm
