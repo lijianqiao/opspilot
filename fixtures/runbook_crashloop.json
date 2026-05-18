@@ -1,0 +1,11 @@
+{
+  "name": "CrashLoopBackOff 故障排查",
+  "keywords": ["CrashLoopBackOff", "crash", "反复重启", "panic"],
+  "steps": [
+    "1. 查看 pod 状态和重启次数：kubectl get pods -l app=<service>",
+    "2. 查看上次崩溃日志：kubectl logs <pod-name> --previous",
+    "3. 查看 pod 事件：kubectl describe pod <pod-name> | tail -30",
+    "4. 常见原因：启动命令错误、配置缺失、依赖服务不可达、panic/segfault",
+    "5. 临时措施：回滚到上一个正常版本；长期：修复配置或代码"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "高 CPU 占用故障排查",
+  "keywords": ["CPU", "高负载", "throttling", "CPU throttled"],
+  "steps": [
+    "1. 查看 CPU 使用趋势：Prometheus query 'rate(container_cpu_usage_seconds_total[5m])'",
+    "2. 查看 CPU throttling：Prometheus query 'rate(container_cpu_cfs_throttled_seconds_total[5m])'",
+    "3. 查看最近部署：检查是否有新版本上线导致 CPU 飙升",
+    "4. 常见原因：死循环、正则回溯、大量 JSON 序列化、GC 频繁",
+    "5. 临时措施：增加 CPU limit 或扩容；长期：profile 代码找到热点"
+  ]
+}
