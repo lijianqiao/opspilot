@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Protocol
 
-from opspilot.tools.registry import build_tools_prompt, call_tool, get_registered_tools
+from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,6 @@ async def run_react(
     - Action Input parsed as JSON when possible (multi-arg support)
     - Tool execution errors caught and fed back as observations via call_tool()
     """
-    tools = get_registered_tools()
     system_prompt = (
         f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
     )

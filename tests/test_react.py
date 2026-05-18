@@ -70,7 +70,7 @@ async def test_react_json_action_input() -> None:
         ]
     )
     answer = await run_react("查错误日志", llm)  # type: ignore[arg-type]
-    assert "ERROR" in answer or "发现" in answer
+    assert "发现" in answer
 
 
 @pytest.mark.anyio
