@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 
 from opspilot.tools.registry import (
@@ -12,7 +14,7 @@ from opspilot.tools.registry import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_registry() -> None:
+def _clear_registry() -> Generator[None, None, None]:
     """Isolate each test with an empty registry, then restore the real one.
 
     Previously this cleared the global registry on teardown and never

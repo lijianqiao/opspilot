@@ -16,7 +16,9 @@ def test_fallback_returns_next_enabled_provider() -> None:
     first = GatewayProvider(name="local", base_url="http://localhost:8080/v1", api_key="sk-local")
     second = GatewayProvider(name="backup", base_url="https://example.test/v1", api_key="sk-backup")
     router = ProviderRouter([first, second])
-    assert router.fallback_after(first).name == "backup"
+    fallback = router.fallback_after(first)
+    assert fallback is not None
+    assert fallback.name == "backup"
 
 
 def test_fallback_returns_none_when_no_next_provider() -> None:

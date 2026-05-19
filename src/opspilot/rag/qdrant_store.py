@@ -73,7 +73,7 @@ class QdrantStore:
             points.append(
                 models.PointStruct(
                     id=point_id,
-                    vector=vector,
+                    vector=vector,  # type: ignore[arg-type]
                     payload=payloads[i],
                 )
             )

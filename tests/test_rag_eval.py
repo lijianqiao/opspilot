@@ -32,6 +32,7 @@ def test_qa_dataset_questions_are_unique(qa_dataset):
 async def test_rag_eval_pipeline_runs():
     """Verify the RAG eval pipeline structure with in-memory Qdrant."""
     from ragas import EvaluationDataset, SingleTurnSample
+    from ragas.dataset_schema import SingleTurnSampleOrMultiTurnSample
 
     from opspilot.rag.embedding import EmbeddingService
     from opspilot.rag.qdrant_store import QdrantStore
@@ -56,7 +57,7 @@ async def test_rag_eval_pipeline_runs():
     )
     svc = RetrievalService(store=store, embedding_service=emb)
 
-    samples = [
+    samples: list[SingleTurnSampleOrMultiTurnSample] = [
         SingleTurnSample(
             user_input="OOMKilled 怎么排查",
             retrieved_contexts=svc.retrieve("OOMKilled 怎么排查"),
