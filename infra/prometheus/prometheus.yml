@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: opspilot-agent-core
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["agent-core:8000"]
