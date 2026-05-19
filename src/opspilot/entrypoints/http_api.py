@@ -13,12 +13,11 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
-from opspilot.observability.metrics import record_agent_request, render_metrics
-
 from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.supervisor import run_supervisor
 from opspilot.config import get_settings
 from opspilot.llm.client import LLMClient
+from opspilot.observability.metrics import record_agent_request, render_metrics
 
 AgentFn = Callable[[str], Awaitable[str]]
 
