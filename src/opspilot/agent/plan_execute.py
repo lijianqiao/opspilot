@@ -12,14 +12,14 @@ import re
 from contextvars import ContextVar
 from typing import Annotated, Any, Protocol
 
-logger = logging.getLogger(__name__)
-
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.config import get_settings
 from opspilot.tools.registry import build_tools_prompt, call_tool
+
+logger = logging.getLogger(__name__)
 
 _ACTION_RE = re.compile(r"Action:\s*(\S+)")
 _ACTION_INPUT_RE = re.compile(r"Action Input:\s*(.*)", re.DOTALL)
