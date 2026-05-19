@@ -32,3 +32,21 @@ def test_settings_stage2_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_settings_stage2_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPSPILOT_AGENT_MAX_TOOL_CALLS", "3")
     assert Settings().agent_max_tool_calls == 3
+
+
+def test_get_settings_is_cached() -> None:
+    assert get_settings() is get_settings()  # 同一实例，未重复读 .env
+
+
+def test_settings_repr_masks_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPSPILOT_LLM_API_KEY", "sk-supersecret999")
+    monkeypatch.setenv("OPSPILOT_PG_DSN", "postgresql://u:pw123@h/db")
+    monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "tok-abc987")
+    s = Settings()
+    rendered = repr(s) + str(s)
+    assert "sk-supersecret999" not in rendered
+    assert "pw123" not in rendered
+    assert "tok-abc987" not in rendered
+    # 脱敏只影响展示，取值仍正常
+    assert s.llm_api_key == "sk-supersecret999"
+    assert s.api_auth_token == "tok-abc987"

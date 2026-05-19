@@ -8,28 +8,31 @@ pattern, same regex tool protocol, same guardrail-aware execution.
 from __future__ import annotations
 
 import logging
-import re
 from contextvars import ContextVar
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
+from opspilot.agent.protocols import SupportsChat
+from opspilot.agent.react_protocol import (
+    ACTION_INPUT_RE as _ACTION_INPUT_RE,
+)
+from opspilot.agent.react_protocol import (
+    ACTION_RE as _ACTION_RE,
+)
+from opspilot.agent.react_protocol import (
+    FINAL_RE as _FINAL_RE,
+)
+from opspilot.agent.react_protocol import (
+    STEP_RE as _STEP_RE,
+)
 from opspilot.config import get_settings
 from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
-
-_ACTION_RE = re.compile(r"Action:\s*(\S+)")
-_ACTION_INPUT_RE = re.compile(r"Action Input:\s*(.*)", re.DOTALL)
-_FINAL_RE = re.compile(r"Final Answer:\s*(.*)", re.DOTALL)
-_STEP_RE = re.compile(r"^\s*\d+[.)]\s*(.+)$", re.MULTILINE)
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 def _append(left: list[dict[str, str]], right: list[dict[str, str]]) -> list[dict[str, str]]:

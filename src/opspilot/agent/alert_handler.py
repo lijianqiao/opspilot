@@ -10,16 +10,13 @@ Coordination pipeline:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any
 
+from opspilot.agent.protocols import SupportsChat
 from opspilot.tools.log_tools import aggregate_errors
 from opspilot.tools.runbook import retrieve_runbook
 
 logger = logging.getLogger(__name__)
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 def _extract_context(payload: dict[str, Any]) -> dict[str, str]:

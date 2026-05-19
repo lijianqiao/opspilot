@@ -13,26 +13,28 @@ Learning comparison (see docs/stages/stage1_agent_core.md):
 from __future__ import annotations
 
 import logging
-import re
 from contextvars import ContextVar
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
+from opspilot.agent.protocols import SupportsChat
+from opspilot.agent.react_protocol import (
+    ACTION_INPUT_RE as _ACTION_INPUT_RE,
+)
+from opspilot.agent.react_protocol import (
+    ACTION_RE as _ACTION_RE,
+)
+from opspilot.agent.react_protocol import (
+    FINAL_RE as _FINAL_RE,
+)
 from opspilot.config import get_settings
 from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
-
-
-# --- Protocol (same as react.py) ---
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 # --- State ---
@@ -49,13 +51,6 @@ class AgentState(TypedDict):
     steps_taken: int
     max_steps: int
     tool_calls: int
-
-
-# --- Regex patterns ---
-
-_ACTION_RE = re.compile(r"Action:\s*(\S+)")
-_ACTION_INPUT_RE = re.compile(r"Action Input:\s*(.*)", re.DOTALL)
-_FINAL_RE = re.compile(r"Final Answer:\s*(.*)", re.DOTALL)
 
 
 # --- Nodes ---

@@ -8,21 +8,12 @@ as a reference for the stage summary comparison.
 from __future__ import annotations
 
 import logging
-import re
-from typing import Protocol
 
+from opspilot.agent.protocols import SupportsChat
+from opspilot.agent.react_protocol import parse_react_output
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
-
-
-_ACTION_RE = re.compile(r"Action:\s*(\S+)")
-_ACTION_INPUT_RE = re.compile(r"Action Input:\s*(.*)", re.DOTALL)
-_FINAL_RE = re.compile(r"Final Answer:\s*(.*)", re.DOTALL)
 
 
 async def run_react(
@@ -48,23 +39,18 @@ async def run_react(
         reply = await llm.chat(messages)
         messages.append({"role": "assistant", "content": reply})
 
+        parsed = parse_react_output(reply)
+
         # Final Answer → return
-        if final := _FINAL_RE.search(reply):
-            return final.group(1).strip()
+        if parsed.final is not None:
+            return parsed.final
 
         # No Action → return raw reply
-        action = _ACTION_RE.search(reply)
-        if action is None:
+        if parsed.action is None:
             return reply.strip()
 
-        tool_name = action.group(1)
-
-        # Parse Action Input
-        arg_match = _ACTION_INPUT_RE.search(reply)
-        raw_input = arg_match.group(1).strip() if arg_match else ""
-
         # Execute tool with error handling
-        observation = call_tool(tool_name, raw_input)
+        observation = call_tool(parsed.action, parsed.action_input)
 
         messages.append({"role": "user", "content": f"Observation: {observation}"})
 
