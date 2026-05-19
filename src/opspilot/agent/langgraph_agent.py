@@ -15,24 +15,18 @@ from __future__ import annotations
 import logging
 import re
 from contextvars import ContextVar
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
+from opspilot.agent.protocols import SupportsChat
 from opspilot.config import get_settings
 from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
-
-
-# --- Protocol (same as react.py) ---
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 # --- State ---

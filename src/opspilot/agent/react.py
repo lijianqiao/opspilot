@@ -9,15 +9,11 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Protocol
 
+from opspilot.agent.protocols import SupportsChat
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 _ACTION_RE = re.compile(r"Action:\s*(\S+)")

@@ -15,12 +15,13 @@ from __future__ import annotations
 import logging
 import re
 from contextvars import ContextVar
-from typing import Any, Protocol
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from opspilot.agent.langgraph_agent import run_react_graph
+from opspilot.agent.protocols import SupportsChat
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +38,6 @@ _K8S_OPERATOR_TOOLS = {
     "query_prometheus",
 }
 _GENERIC_TOOLS = {"get_pod_status", "kubectl_get", "kubectl_describe", "query_loki", "query_prometheus"}
-
-
-class SupportsChat(Protocol):
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
 class SupervisorState(TypedDict):
