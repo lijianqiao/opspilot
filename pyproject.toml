@@ -18,6 +18,8 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "qdrant-client>=1.16.0",
     "fastembed>=0.5.0",
+    "redis>=5.2.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [project.scripts]
