@@ -32,3 +32,7 @@ def test_settings_stage2_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_settings_stage2_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPSPILOT_AGENT_MAX_TOOL_CALLS", "3")
     assert Settings().agent_max_tool_calls == 3
+
+
+def test_get_settings_is_cached() -> None:
+    assert get_settings() is get_settings()  # 同一实例，未重复读 .env
