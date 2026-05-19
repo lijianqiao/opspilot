@@ -65,3 +65,6 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
         )
 
     return app
+
+
+app = create_app()
