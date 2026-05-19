@@ -420,6 +420,8 @@ uv run python scripts/demo_smoke.py --base-url http://localhost:8000
 
 ### 5.10 LLM Gateway 测试（可选）
 
+> Gateway 在容器外独立运行，需要项目根目录的 `.env`（不是 `infra/.env`）。确保已 `cp .env.example .env`。
+
 ```bash
 cd ~/opspilot
 
@@ -440,7 +442,69 @@ curl -s http://localhost:8090/v1/chat/completions \
 curl -s http://localhost:8090/metrics | grep opspilot_gateway
 ```
 
-### 5.11 Grafana 控制台验证
+### 5.11 飞书 Bot 测试（可选）
+
+> 飞书 Bot 需要从**飞书开放平台**注册应用后才能使用。如果没有飞书账号或不需要 IM 入口，可以跳过本节。
+
+#### 前置准备：创建飞书应用
+
+1. 访问 [飞书开放平台](https://open.feishu.cn/app) → **创建企业自建应用**
+2. **添加能力**：开启「消息与群组」→「机器人」→ 获取 **App ID** 和 **App Secret**
+3. **配置权限**（需要管理员审批，测试时可先由自己批准）：
+   - `im:message` — 接收和发送消息
+   - `im:message:send_as_bot` — 以机器人身份发送消息
+4. **事件订阅**：添加 `im.message.receive_v1` 事件
+5. **发布版本**：创建新版本并发布（审批通过后生效）
+
+#### 配置环境变量
+
+飞书 Bot 在容器外独立运行，读取的是**项目根目录的 `.env`**（不是 `infra/.env`）：
+
+```bash
+cd ~/opspilot
+cp .env.example .env
+```
+
+编辑 `.env`，添加：
+
+```bash
+OPSPILOT_FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
+OPSPILOT_FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+#### 启动飞书 Bot
+
+```bash
+cd ~/opspilot
+uv run python -c "from opspilot.entrypoints.feishu_ws import run; run()"
+```
+
+> 飞书 Bot 是独立的 WebSocket 长连接，不需要 agent-core 容器。Bot 启动后会在控制台输出日志，按 Ctrl+C 停止。
+
+#### 在飞书中测试
+
+在飞书桌面端找到你的机器人，发送以下消息测试：
+
+| 测试内容 | 发送的消息 | 预期回复 |
+|---------|-----------|---------|
+| **基础问答（ReAct）** | `default 有哪些 pod 不正常` | Agent 调用工具，返回 pod 状态汇总 |
+| **Plan-Execute 模式** | `规划：排查 user-service 最近错误日志` | 先输出执行计划，再逐步执行 |
+| | `/plan default 有哪些 pod 不正常` | 同上，`/plan` 前缀也触发 Plan-Execute |
+| **危险操作二次确认** | `把 order-service 扩容到 50 个副本` | Bot 弹出确认卡片，需点击「确认执行」或「取消」 |
+| **@提及** | `@机器人 default 有哪些 pod 不正常` | 自动去除 @ 前缀，正常回复 |
+
+> 确认卡片功能：当 agent 识别到危险操作（如扩容、删除）时，会通过 `feishu_card.py` 发送交互卡片。用户点击「确认执行」后才会真正调用工具，点击「取消」则放弃。
+
+#### 运行飞书相关单元测试
+
+```bash
+cd ~/opspilot
+uv run pytest tests/test_feishu_ws.py tests/test_feishu_card.py -v
+```
+
+预期：3-5 条测试全部 PASS（不需要真实飞书账号，全部基于 mock）。
+
+### 5.12 Grafana 控制台验证
 
 浏览器访问 `http://<VM_IP>:3000`
 
@@ -449,7 +513,7 @@ curl -s http://localhost:8090/metrics | grep opspilot_gateway
 
 进入 **Dashboards → OpsPilot Overview**，确认能看到 4 个面板（需要先产生一些流量，即先执行几次 /ask）。
 
-### 5.12 Prometheus 查询验证
+### 5.13 Prometheus 查询验证
 
 浏览器访问 `http://<VM_IP>:9090`
 
@@ -466,7 +530,7 @@ histogram_quantile(0.99, sum(rate(opspilot_tool_call_seconds_bucket[5m])) by (le
 sum(increase(opspilot_guardrail_blocks_total[1h])) by (tool)
 ```
 
-### 5.13 一键完整测试脚本
+### 5.14 一键完整测试脚本
 
 将以下脚本保存并运行，一次性覆盖所有无 LLM 依赖的测试：
 
