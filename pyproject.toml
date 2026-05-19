@@ -24,6 +24,7 @@ dependencies = [
 
 [project.scripts]
 opspilot = "opspilot.entrypoints.cli:main"
+opspilot-gateway = "opspilot.entrypoints.llm_gateway:main"
 
 [dependency-groups]
 dev = [
