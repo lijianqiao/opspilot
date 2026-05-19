@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 
 from opspilot.gateway.config import GatewayProvider, GatewaySettings
+from opspilot.gateway.metrics import build_registry, render_metrics
 from opspilot.gateway.providers import ProviderRouter
 
 
@@ -24,7 +26,15 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
     settings = settings or GatewaySettings()
     router = ProviderRouter(settings.providers)
 
+    registry, request_counter, request_latency = build_registry()
+
     app = FastAPI(title="OpsPilot LLM Gateway")
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(
+            content=render_metrics(registry), media_type="text/plain; version=0.0.4"
+        )
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
@@ -40,12 +50,16 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
 
         payload = await request.json()
         provider = router.select()
-        upstream = await _proxy_chat(provider, payload, settings.provider_timeout_seconds)
+        with request_latency.labels(provider=provider.name).time():
+            upstream = await _proxy_chat(provider, payload, settings.provider_timeout_seconds)
+        request_counter.labels(provider=provider.name, status=str(upstream.status_code)).inc()
 
         if upstream.status_code >= 500:
             fallback = router.fallback_after(provider)
             if fallback is not None:
-                upstream = await _proxy_chat(fallback, payload, settings.provider_timeout_seconds)
+                with request_latency.labels(provider=fallback.name).time():
+                    upstream = await _proxy_chat(fallback, payload, settings.provider_timeout_seconds)
+                request_counter.labels(provider=fallback.name, status=str(upstream.status_code)).inc()
 
         return Response(
             content=upstream.content,

@@ -54,6 +54,17 @@ async def test_chat_completions_proxies_to_provider() -> None:
 
 
 @pytest.mark.anyio
+async def test_metrics_endpoint_exposes_prometheus_text() -> None:
+    app = create_app(settings=GatewaySettings(), limiter=AllowAllLimiter())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert "text/plain" in resp.headers["content-type"]
+    assert "opspilot_gateway_requests_total" in resp.text
+
+
+@pytest.mark.anyio
 async def test_rate_limit_blocks_request_before_provider_call() -> None:
     app = create_app(settings=GatewaySettings(), limiter=BlockAllLimiter())
     transport = httpx.ASGITransport(app=app)
