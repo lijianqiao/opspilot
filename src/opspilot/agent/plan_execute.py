@@ -17,6 +17,7 @@ from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.config import get_settings
+from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
         if calls > get_settings().agent_max_tool_calls:
             obs = "工具调用次数已达上限。"
         elif is_dangerous(tool_name, raw):
+            record_guardrail_block(tool_name)
             obs = f"危险操作被拦截，需人工确认：{tool_name} {raw}（confirm_dangerous_op token=CONFIRM 放行）"
         else:
             obs = redact(call_tool(tool_name, raw))

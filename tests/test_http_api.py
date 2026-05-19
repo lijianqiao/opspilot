@@ -39,3 +39,13 @@ async def test_ask_rejects_empty_question() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/ask", json={"question": "   "})
     assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_metrics_endpoint() -> None:
+    app = create_app(agent=fake_agent)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert "opspilot_agent_requests_total" in resp.text

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
+
+from opspilot.observability.metrics import record_agent_request, render_metrics
 
 from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.supervisor import run_supervisor
@@ -46,12 +48,22 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(content=render_metrics(), media_type="text/plain; version=0.0.4")
+
     @app.post("/ask", response_model=AskResponse)
     async def ask(request: AskRequest) -> AskResponse:
         question = request.question.strip()
         if not question:
             raise HTTPException(status_code=422, detail="question is required")
-        return AskResponse(answer=await agent_fn(question))
+        try:
+            answer = await agent_fn(question)
+        except Exception:
+            record_agent_request(endpoint="/ask", status="error")
+            raise
+        record_agent_request(endpoint="/ask", status="success")
+        return AskResponse(answer=answer)
 
     @app.post("/alert")
     async def alert(payload: dict) -> dict[str, str]:

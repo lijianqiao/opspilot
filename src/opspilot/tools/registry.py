@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import inspect
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, get_type_hints, overload
+
+from opspilot.observability.metrics import record_tool_call
 
 # Module-level registry — populated by @register_tool
 _registry: dict[str, ToolInfo] = {}
@@ -173,6 +176,8 @@ def call_tool(name: str, raw_input: str) -> str:
         return f"错误：工具 {name} 不存在。可用工具：{list(tools)}"
 
     info = tools[name]
+    started = time.perf_counter()
+    status = "success"
     try:
         # Try JSON first
         try:
@@ -203,4 +208,7 @@ def call_tool(name: str, raw_input: str) -> str:
 
         return info.func(raw_input)
     except Exception as e:
+        status = "error"
         return f"工具执行错误：{e}"
+    finally:
+        record_tool_call(name, status, time.perf_counter() - started)
