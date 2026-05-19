@@ -1,5 +1,4 @@
 import pytest
-from qdrant_client import QdrantClient
 
 from opspilot.rag.qdrant_store import COLLECTION_NAME, QdrantStore
 

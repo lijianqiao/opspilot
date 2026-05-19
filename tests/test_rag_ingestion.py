@@ -1,6 +1,4 @@
-import pytest
-
-from opspilot.rag.ingestion import MarkdownChunk, chunk_markdown
+from opspilot.rag.ingestion import chunk_markdown
 
 
 def test_chunk_markdown_splits_by_headings():

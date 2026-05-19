@@ -1,5 +1,3 @@
-import numpy as np
-
 from opspilot.rag.embedding import EmbeddingService
 from opspilot.rag.qdrant_store import QdrantStore
 from opspilot.rag.retrieval import RetrievalService
@@ -14,7 +12,6 @@ def _build_service() -> RetrievalService:
 
 def _seed(store: QdrantStore, emb_svc: EmbeddingService) -> None:
     """Ingest a few test documents via the embedding service."""
-    import numpy as np
 
     docs = [
         "# OOMKilled\n\n## 排查\n\n检查内存限制和日志。查看 memory limit 配置和 kubectl top，"

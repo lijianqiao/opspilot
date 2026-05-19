@@ -22,6 +22,7 @@ from typing_extensions import TypedDict
 
 from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.config import get_settings
+from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.registry import build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,7 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
         }
 
     if is_dangerous(tool_name, raw_input):
+        record_guardrail_block(tool_name)
         return {
             "messages": [
                 {

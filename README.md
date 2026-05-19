@@ -43,6 +43,30 @@ cd opspilot
 python main.py
 ```
 
+## 10 分钟复现
+
+```bash
+uv sync
+uv run pytest -q
+uv run python scripts/run_eval.py
+
+# 启动依赖与 agent-core
+docker compose -f infra/docker-compose.yml up -d postgres qdrant redis
+docker compose -f infra/docker-compose.yml up --build agent-core prometheus grafana
+
+# 健康检查
+curl http://localhost:8000/healthz
+curl http://localhost:8000/metrics
+
+# 运行 demo smoke（需要本地 llama.cpp/OpenAI-compatible server 可用）
+uv run python scripts/demo_smoke.py
+```
+
+Grafana: http://localhost:3000 (`admin` / `admin`)
+Prometheus: http://localhost:9090
+
+默认 `agent-core` 连接 `http://host.docker.internal:8080/v1` 的 OpenAI-compatible LLM server。没有启动 llama.cpp 时，单测和离线 Eval 仍可运行；真实 `/ask` demo 需要可用 LLM。
+
 ## Quickstart
 
 跑通第一条纵切（CLI → 手写 ReAct → mock 工具，基于 fixture 回答）只需 3 步。详见 [阶段 0 总结文档](docs/stages/stage0_foundation.md)。
@@ -113,3 +137,29 @@ uv run python scripts/run_eval.py
 ```
 
 详见 [阶段 4 总结文档](docs/stages/stage4_rag_knowledge_base.md)。
+
+### Stage 5 新增能力 — LLM Gateway + QLoRA 原理实验
+
+```bash
+# 启动 Redis（Gateway 限流用）
+docker compose -f infra/docker-compose.yml up -d redis
+
+# 另开终端启动 llama.cpp OpenAI 兼容 server（默认 :8080）
+./llama-server -m /path/to/Qwen3.5-9B.Q4_K_M.gguf --port 8080
+
+# 启动 Gateway（OpenAI 兼容代理，默认 :8090）
+uv run opspilot-gateway
+
+# 用 curl 打 Gateway
+curl http://localhost:8090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer anything" \
+  -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"hello"}]}'
+
+# 指标
+curl http://localhost:8090/metrics
+```
+
+QLoRA 实验见 `experiments/stage5_finetune/README.md`。训练依赖不进入主项目依赖。
+
+详见 [阶段 5 总结文档](docs/stages/stage5_gateway_finetune.md)。

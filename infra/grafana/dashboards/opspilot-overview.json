@@ -1,0 +1,32 @@
+{
+  "title": "OpsPilot Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Agent request rate",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(opspilot_agent_requests_total[5m])) by (status)"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tool call P99",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "histogram_quantile(0.99, sum(rate(opspilot_tool_call_seconds_bucket[5m])) by (le, tool))"}]
+    },
+    {
+      "type": "stat",
+      "title": "Estimated LLM tokens / sec",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(opspilot_llm_tokens_estimated_total[5m]))"}]
+    },
+    {
+      "type": "stat",
+      "title": "Guardrail blocks (1h)",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(increase(opspilot_guardrail_blocks_total[1h])) by (tool)"}]
+    }
+  ]
+}
