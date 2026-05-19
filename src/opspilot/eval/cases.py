@@ -173,4 +173,34 @@ CASES: list[EvalCase] = [
         expected_tool_sequence=["retrieve_runbook"],
         answer_keywords=["CrashLoopBackOff", "Runbook"],
     ),
+    EvalCase(
+        name="stage4_rag_oom_retrieval",
+        question="OOMKilled 怎么排查",
+        scripted_replies=[
+            "Action: retrieve_runbook\nAction Input: OOMKilled 怎么排查",
+            "Final Answer: OOMKilled 需排查 memory limit 配置和内存泄漏。",
+        ],
+        expected_tool_sequence=["retrieve_runbook"],
+        answer_keywords=["OOMKilled", "memory"],
+    ),
+    EvalCase(
+        name="stage4_rag_crashloop_retrieval",
+        question="CrashLoopBackOff 反复重启怎么排查",
+        scripted_replies=[
+            "Action: retrieve_runbook\nAction Input: CrashLoopBackOff 反复重启怎么排查",
+            "Final Answer: CrashLoopBackOff 需查看 pod 事件和上次崩溃日志。",
+        ],
+        expected_tool_sequence=["retrieve_runbook"],
+        answer_keywords=["CrashLoopBackOff", "pod"],
+    ),
+    EvalCase(
+        name="stage4_rag_unknown_fallback",
+        question="用一段不存在的错误信息查询",
+        scripted_replies=[
+            "Action: retrieve_runbook\nAction Input: 用一段不存在的错误信息查询",
+            "Final Answer: 此为通用故障排查步骤。",
+        ],
+        expected_tool_sequence=["retrieve_runbook"],
+        answer_keywords=["通用"],
+    ),
 ]

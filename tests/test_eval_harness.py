@@ -5,7 +5,7 @@ from opspilot.eval.harness import EvalResult, run_all
 
 
 def test_there_are_fifteen_cases() -> None:
-    assert len(CASES) == 15
+    assert len(CASES) == 18
     for c in CASES:
         assert c.question
         assert isinstance(c.scripted_replies, list) and c.scripted_replies
@@ -14,7 +14,7 @@ def test_there_are_fifteen_cases() -> None:
 @pytest.mark.anyio
 async def test_run_all_scores_three_metrics() -> None:
     results = await run_all()
-    assert len(results) == 15
+    assert len(results) == 18
     for r in results:
         assert isinstance(r, EvalResult)
         assert r.tool_sequence_ok in (True, False)
