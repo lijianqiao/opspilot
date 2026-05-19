@@ -113,3 +113,29 @@ uv run python scripts/run_eval.py
 ```
 
 详见 [阶段 4 总结文档](docs/stages/stage4_rag_knowledge_base.md)。
+
+### Stage 5 新增能力 — LLM Gateway + QLoRA 原理实验
+
+```bash
+# 启动 Redis（Gateway 限流用）
+docker compose -f infra/docker-compose.yml up -d redis
+
+# 另开终端启动 llama.cpp OpenAI 兼容 server（默认 :8080）
+./llama-server -m /path/to/Qwen3.5-9B.Q4_K_M.gguf --port 8080
+
+# 启动 Gateway（OpenAI 兼容代理，默认 :8090）
+uv run opspilot-gateway
+
+# 用 curl 打 Gateway
+curl http://localhost:8090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer anything" \
+  -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"hello"}]}'
+
+# 指标
+curl http://localhost:8090/metrics
+```
+
+QLoRA 实验见 `experiments/stage5_finetune/README.md`。训练依赖不进入主项目依赖。
+
+详见 [阶段 5 总结文档](docs/stages/stage5_gateway_finetune.md)。
