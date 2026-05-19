@@ -75,3 +75,6 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             await llm.aclose()
 
     return app
+
+
+app = create_app()
