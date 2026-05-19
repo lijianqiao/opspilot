@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 import httpx
@@ -32,9 +31,7 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
 
     @app.get("/metrics")
     async def metrics() -> Response:
-        return Response(
-            content=render_metrics(registry), media_type="text/plain; version=0.0.4"
-        )
+        return Response(content=render_metrics(registry), media_type="text/plain; version=0.0.4")
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

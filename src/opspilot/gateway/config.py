@@ -23,9 +23,7 @@ class GatewaySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OPSPILOT_GATEWAY_", env_file=".env", extra="ignore")
 
     providers: list[GatewayProvider] = Field(
-        default_factory=lambda: [
-            GatewayProvider(name="local", base_url="http://localhost:8080/v1", api_key="sk-local")
-        ]
+        default_factory=lambda: [GatewayProvider(name="local", base_url="http://localhost:8080/v1", api_key="sk-local")]
     )
     redis_url: str = "redis://localhost:6379/0"
     requests_per_minute: int = 60
