@@ -26,6 +26,23 @@ services:
     ports:
       - "6379:6379"
 
+  agent-core:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: opspilot-agent-core
+    environment:
+      OPSPILOT_LLM_BASE_URL: ${OPSPILOT_LLM_BASE_URL:-http://host.docker.internal:8080/v1}
+      OPSPILOT_LLM_MODEL: ${OPSPILOT_LLM_MODEL:-qwen3.5-9b}
+      OPSPILOT_LLM_API_KEY: ${OPSPILOT_LLM_API_KEY:-sk-local}
+      OPSPILOT_PG_DSN: postgresql://opspilot:opspilot@postgres:5432/opspilot
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - qdrant
+      - redis
+
 volumes:
   opspilot_pgdata:
   opspilot_qdrant_data:
