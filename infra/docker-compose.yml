@@ -11,5 +11,15 @@ services:
     volumes:
       - opspilot_pgdata:/var/lib/postgresql/data
 
+  qdrant:
+    image: qdrant/qdrant:v1.16.0
+    container_name: opspilot-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - opspilot_qdrant_data:/qdrant/storage
+
 volumes:
   opspilot_pgdata:
+  opspilot_qdrant_data:

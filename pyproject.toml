@@ -16,6 +16,8 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
+    "qdrant-client>=1.16.0",
+    "fastembed>=0.5.0",
 ]
 
 [project.scripts]
@@ -27,6 +29,8 @@ dev = [
     "respx>=0.23.1",
     "ruff>=0.15.13",
     "pyright>=1.1.409",
+    "ragas>=0.4.0",
+    "pandas>=2.0.0",
 ]
 
 [build-system]

@@ -94,3 +94,22 @@ uv run python scripts/run_eval.py
 ```
 
 详见 [阶段 3 总结文档](docs/stages/stage3_multi_agent.md)。
+
+### Stage 4 新增能力 — RAG 知识库
+
+```bash
+# 启动 Qdrant（如果未启动）
+docker compose -f infra/docker-compose.yml up -d qdrant
+
+# Ingestion: 导入 Runbook 文档到 Qdrant
+uv run python scripts/ingest_runbooks.py
+
+# RAGAS 评估: 30 QA 对 faithfulness + context_precision（需要真实 LLM）
+uv run python scripts/run_rag_eval.py
+
+# retrieve_runbook 现基于 Qdrant RAG（Qdrant 不可用时自动 fallback 到 keyword-match）
+# Eval 已扩展至 18 cases
+uv run python scripts/run_eval.py
+```
+
+详见 [阶段 4 总结文档](docs/stages/stage4_rag_knowledge_base.md)。
