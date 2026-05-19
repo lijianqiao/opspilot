@@ -55,11 +55,11 @@ sudo apt-get install -y git curl
 # 9090 - Prometheus
 # 8080 - llama.cpp（LLM server，在宿主机运行）
 
-sudo ufw allow 8000/tcp
-sudo ufw allow 8090/tcp
-sudo ufw allow 3000/tcp
-sudo ufw allow 9090/tcp
-sudo ufw allow 8080/tcp
+sudo ufw allow 8000/tcp comment 'opspilot-agent-core HTTP API'
+sudo ufw allow 8090/tcp comment 'opspilot-LLM Gateway'
+sudo ufw allow 3000/tcp comment 'opspilot-Grafana'
+sudo ufw allow 9090/tcp comment 'opspilot-Prometheus'
+sudo ufw allow 8080/tcp comment 'opspilot-llama.cpp'
 ```
 
 ---
@@ -84,12 +84,127 @@ ls -la
 
 ## 3. 配置 LLM Server
 
-agent-core 需要一个 OpenAI-compatible LLM 服务。推荐在宿主机运行 **llama.cpp server**。
+agent-core 需要一个 OpenAI-compatible LLM 服务。以下三种方案**任选其一**即可。
 
-### 3.1 安装 llama.cpp
+---
+
+### 方案 A：Cloud 云端大模型（推荐，无需 GPU）
+
+使用 DeepSeek / OpenAI / 其他云端 API，宿主机无需安装任何模型推理软件。
+
+#### 获取 API Key
+
+| 平台                   | 注册地址                      | base_url                                            |
+| ---------------------- | ----------------------------- | --------------------------------------------------- |
+| DeepSeek               | https://platform.deepseek.com | `https://api.deepseek.com/v1`                       |
+| OpenAI                 | https://platform.openai.com   | `https://api.openai.com/v1`                         |
+| 硅基流动 (SiliconFlow) | https://siliconflow.cn        | `https://api.siliconflow.cn/v1`                     |
+| 阿里百炼               | https://dashscope.aliyun.com  | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+> 国内网络推荐 DeepSeek（便宜、中文友好）或硅基流动（免费额度多），两者都支持 OpenAI-compatible 接口。
+
+#### 修改 `infra/docker-compose.yml`
+
+按所选平台修改 `agent-core` 的 environment：
+
+```yaml
+# 以 DeepSeek 为例
+agent-core:
+  environment:
+    - OPSPILOT_LLM_BASE_URL=https://api.deepseek.com/v1
+    - OPSPILOT_LLM_MODEL=deepseek-chat
+    - OPSPILOT_LLM_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx     # 替换为你的 API Key
+    - OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@postgres:5432/opspilot
+```
+
+```yaml
+# 以 OpenAI 为例
+agent-core:
+  environment:
+    - OPSPILOT_LLM_BASE_URL=https://api.openai.com/v1
+    - OPSPILOT_LLM_MODEL=gpt-4o-mini
+    - OPSPILOT_LLM_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx     # 替换为你的 API Key
+    - OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@postgres:5432/opspilot
+```
+
+#### 验证 Cloud API 可用
 
 ```bash
-# 在宿主机（非容器内）执行
+curl -s https://api.deepseek.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"say hi"}]}'
+```
+
+> 采用方案 A 则**跳过**下方方案 B / C，直接进入 [第 4 节修改配置并启动](#4-修改配置并启动)。
+
+---
+
+### 方案 B：VMware 虚拟机 → Windows 宿主机 llama.cpp
+
+如果你已经在 Windows 宿主机上运行了 llama.cpp server，想让 VMware Ubuntu 虚拟机内的 Docker 容器访问它。
+
+#### 步骤 1：确认 Windows 宿主机 llama.cpp 正在运行
+
+在 Windows 终端中验证：
+
+```powershell
+curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{\"model\":\"qwen\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'
+```
+
+#### 步骤 2：确认 VMware 网络模式
+
+| VMware 网络模式    | Windows 宿主机在 VM 中的地址  | 说明                              |
+| ------------------ | ----------------------------- | --------------------------------- |
+| **NAT（默认）**    | 网关 IP，通常是 `192.168.x.2` | 运行 `ip route                    | grep default` 查看 |
+| **桥接 (Bridged)** | 宿主机局域网 IP               | 在 Windows 上运行 `ipconfig` 查看 |
+
+在 Ubuntu VM 中执行以下命令确认宿主机 IP：
+
+```bash
+# NAT 模式：查看网关（即宿主机）
+ip route | grep default | awk '{print $3}'
+# 输出类似 192.168.127.2
+
+# 桥接模式：查看宿主机局域网 IP（在 Windows 上运行 ipconfig）
+# 例如 192.168.1.100
+```
+
+#### 步骤 3：从 VM 测试能否连通宿主机 llama.cpp
+
+```bash
+# 替换 <HOST_IP> 为上一步获取的宿主机 IP
+curl http://<HOST_IP>:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen","messages":[{"role":"user","content":"say hi"}]}'
+```
+
+如果报 `connection refused`，检查 Windows 防火墙：确保 `llama-server.exe` 监听的 8080 端口允许来自其他设备的入站连接（控制面板 → Windows Defender 防火墙 → 高级设置 → 入站规则 → 新建规则 → 端口 8080 TCP）。
+
+#### 步骤 4：修改 `infra/docker-compose.yml`
+
+```yaml
+agent-core:
+  environment:
+    - OPSPILOT_LLM_BASE_URL=http://<HOST_IP>:8080/v1     # 替换为宿主机 IP
+    - OPSPILOT_LLM_MODEL=qwen3.5-9b
+    - OPSPILOT_LLM_API_KEY=sk-local
+    - OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@postgres:5432/opspilot
+```
+
+因为 Windows 宿主机 IP 是局域网地址，Docker 容器可直接路由到达，**不需要** `extra_hosts`。
+
+> 采用方案 B 则**跳过**下方方案 C，直接进入 [第 4 节修改配置并启动](#4-修改配置并启动)。
+
+---
+
+### 方案 C：虚拟机本地运行 llama.cpp
+
+在 Ubuntu 虚拟机内直接安装和运行 llama.cpp（需要虚拟机有 GPU 或使用 CPU 推理）。
+
+#### 安装 llama.cpp
+
+```bash
 cd ~
 git clone https://github.com/ggerganov/llama.cpp.git
 cd llama.cpp
@@ -97,28 +212,27 @@ cmake -B build
 cmake --build build --config Release -j$(nproc)
 ```
 
-### 3.2 下载模型
+#### 下载模型
 
-准备一个 GGUF 格式模型文件，例如 Qwen3-5-9B 或其他。将 `.gguf` 文件放到 `~/models/` 目录。
+将 `.gguf` 文件放到 `~/models/` 目录：
 
 ```bash
 mkdir -p ~/models
-# 示例：从 HuggingFace 下载（需安装 huggingface_hub）
+# 示例：从 HuggingFace 下载
 # pip install huggingface_hub
 # huggingface-cli download Qwen/Qwen3-5-9B-GGUF qwen3-5-9b-q4_k_m.gguf --local-dir ~/models
 ```
 
-### 3.3 启动 llama.cpp server
+#### 启动 llama.cpp server
 
 ```bash
-# 建议在 screen/tmux 中运行，或写成 systemd service
 ~/llama.cpp/build/bin/llama-server \
   -m ~/models/qwen3-5-9b-q4_k_m.gguf \
   --port 8080 \
   --host 0.0.0.0
 ```
 
-验证 LLM 服务可用：
+#### 验证
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
@@ -126,38 +240,34 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model":"qwen","messages":[{"role":"user","content":"say hi"}]}'
 ```
 
----
-
-## 4. 修改配置并启动
-
-### 4.1 配置 docker-compose.yml 中的 LLM 地址
-
-编辑 `infra/docker-compose.yml`，修改 `agent-core` 服务的 `OPSPILOT_LLM_BASE_URL`：
+#### 修改 `infra/docker-compose.yml`
 
 ```yaml
 agent-core:
-  build:
-    context: ../
-    dockerfile: Dockerfile
-  ports:
-    - "8000:8000"
   environment:
     - OPSPILOT_LLM_BASE_URL=http://host.docker.internal:8080/v1
     - OPSPILOT_LLM_MODEL=qwen3.5-9b
     - OPSPILOT_LLM_API_KEY=sk-local
     - OPSPILOT_PG_DSN=postgresql://opspilot:opspilot@postgres:5432/opspilot
-  depends_on:
-    postgres:
-      condition: service_started
-    qdrant:
-      condition: service_started
-    redis:
-      condition: service_started
   extra_hosts:
     - "host.docker.internal:host-gateway"
 ```
 
-> **关键**：`extra_hosts` 让容器内的 `host.docker.internal` 能解析到宿主机 IP，从而访问宿主机上运行的 llama.cpp。
+> **关键**：`extra_hosts` 让容器内的 `host.docker.internal` 能解析到宿主机（Ubuntu VM）IP。
+
+---
+
+## 4. 修改配置并启动
+
+### 4.1 确认 LLM 配置
+
+根据你在 [第 3 节](#3-配置-llm-server) 中选择的方案，确认 `infra/docker-compose.yml` 中 `agent-core` 的 environment 已正确填写：
+
+- **方案 A**：`OPSPILOT_LLM_BASE_URL` 填云端 API 地址 + `OPSPILOT_LLM_API_KEY` 填真实 Key
+- **方案 B**：`OPSPILOT_LLM_BASE_URL` 填 `http://<Windows宿主IP>:8080/v1`
+- **方案 C**：`OPSPILOT_LLM_BASE_URL` 填 `http://host.docker.internal:8080/v1`，需要 `extra_hosts`
+
+可以先用 curl 验证 LLM 连通性（见各方案的验证命令），确认通过后再执行下一步 docker compose up。
 
 ### 4.2 首次启动所有服务
 
