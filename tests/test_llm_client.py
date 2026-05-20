@@ -1,9 +1,10 @@
 import httpx
 import pytest
 import respx
+from tenacity import wait_none
 
 from opspilot.config import Settings
-from opspilot.llm.client import LLMClient
+from opspilot.llm.client import CircuitOpenError, LLMClient
 
 
 @pytest.mark.anyio
@@ -80,3 +81,61 @@ async def test_chat_retries_transport_error_then_succeeds() -> None:
         await client.aclose()
     assert reply == "ok"
     assert route.call_count == 2
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_circuit_opens_after_consecutive_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 加速：测试用 wait_none() 跳过 tenacity 的 backoff
+    monkeypatch.setattr("opspilot.llm.client._RETRY_WAIT", wait_none())
+    route = respx.post("http://test/v1/chat/completions").mock(return_value=httpx.Response(500))
+    settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
+    client = LLMClient(settings)
+
+    # 3 次连续失败 → 熔断打开
+    for _ in range(3):
+        with pytest.raises(Exception):  # noqa: B017
+            await client.chat([{"role": "user", "content": "x"}])
+
+    calls_before_open = route.call_count
+    # 熔断打开期间立即抛 CircuitOpenError，且不再打网络
+    with pytest.raises(CircuitOpenError):
+        await client.chat([{"role": "user", "content": "x"}])
+    assert route.call_count == calls_before_open  # 无新增 HTTP 调用
+
+    await client.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_circuit_half_open_probes_after_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 加速 + 短 cooldown
+    monkeypatch.setattr("opspilot.llm.client._RETRY_WAIT", wait_none())
+    monkeypatch.setattr("opspilot.llm.client._CB_COOLDOWN_SECONDS", 0.05)
+    settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
+    client = LLMClient(settings)
+
+    # 先用 500 触发熔断
+    fail_route = respx.post("http://test/v1/chat/completions").mock(return_value=httpx.Response(500))
+    for _ in range(3):
+        with pytest.raises(Exception):  # noqa: B017
+            await client.chat([{"role": "user", "content": "x"}])
+    # 此时熔断打开
+    with pytest.raises(CircuitOpenError):
+        await client.chat([{"role": "user", "content": "x"}])
+
+    # 等 cooldown 过去，切换上游响应 200
+    import asyncio
+
+    await asyncio.sleep(0.1)
+    fail_route.mock(return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]}))
+
+    # 半开探测：放行一次；成功 → 熔断关闭
+    reply = await client.chat([{"role": "user", "content": "x"}])
+    assert reply == "ok"
+
+    # 后续调用不再触发熔断
+    reply2 = await client.chat([{"role": "user", "content": "x"}])
+    assert reply2 == "ok"
+
+    await client.aclose()
