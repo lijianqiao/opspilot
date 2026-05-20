@@ -99,6 +99,33 @@ async def test_max_steps_guards_plan_execute() -> None:
 
 
 @pytest.mark.anyio
+async def test_plan_execute_hard_rejects_tool_outside_filter() -> None:
+    """
+    Verify Plan-Execute hard-rejects executor tool calls outside the filter.
+
+    验证：Plan-Execute 在 executor 入口硬拒绝不在 tool_filter 内的工具。
+    """
+    raw = '{"deployment":"user-service","replicas":0}'
+    llm = FakeLLM(
+        [
+            "1. scale user-service",
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "DONE",
+        ]
+    )
+    answer = await run_plan_execute(
+        "scale user-service to zero",
+        llm,
+        max_steps=4,
+        tool_filter={"kubectl_get"},
+    )
+    # Final answer or any captured observation should reflect the rejection.
+    assert "not allowed" in answer.lower() or any(
+        "not allowed" in msg["content"].lower() for call in llm.calls for msg in call
+    )
+
+
+@pytest.mark.anyio
 async def test_plan_execute_confirmed_request_executes_once() -> None:
     """
     Verify plan execute confirmed request executes once.

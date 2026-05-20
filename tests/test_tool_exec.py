@@ -125,6 +125,25 @@ def test_confirmed_request_is_bound_to_original_tool_and_input(tmp_path) -> None
     assert store.is_confirmed(pc.request_id) is True
 
 
+def test_guarded_call_rejects_tool_not_in_allowed_set(tmp_path) -> None:
+    """
+    Verify a tool outside the allowlist is hard-blocked at execution.
+
+    验证：不在 allowlist 内的工具会在执行入口被硬拦截。
+    """
+    result = guarded_call_tool(
+        "kubectl_scale",
+        '{"deployment":"user-service","replicas":0}',
+        calls=1,
+        max_calls=8,
+        store=ConfirmationStore(300),
+        allowed_tools={"kubectl_get"},
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    assert result.blocked is True
+    assert "not allowed" in result.observation.lower()
+
+
 def test_observation_redacted(tmp_path) -> None:
     """
     Verify observation redacted.

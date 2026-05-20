@@ -114,6 +114,23 @@ async def test_graph_matches_handwritten_behavior() -> None:
 
 
 @pytest.mark.anyio
+async def test_react_graph_hard_rejects_tool_outside_filter() -> None:
+    """
+    Verify ReAct graph hard-rejects tool not in the configured filter.
+
+    验证：ReAct 图在执行入口硬拒绝不在 tool_filter 内的工具。
+    """
+    llm = FakeLLM(
+        [
+            'Action: kubectl_scale\nAction Input: {"deployment":"user-service","replicas":0}',
+            "Final Answer: done",
+        ]
+    )
+    answer = await run_react_graph("check logs", llm, tool_filter={"kubectl_get"})
+    assert "not allowed" in answer.lower() or "not allowed" in llm.calls[1][-1]["content"].lower()
+
+
+@pytest.mark.anyio
 async def test_graph_confirmed_request_executes_once() -> None:
     """
     Verify graph confirmed request executes once.

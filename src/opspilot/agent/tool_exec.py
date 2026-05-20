@@ -48,6 +48,7 @@ def guarded_call_tool(
     confirmed_request_id: str | None = None,
     audit_path: str | None = None,
     actor: str = "agent",
+    allowed_tools: set[str] | None = None,
 ) -> GuardedResult:
     """All-in-one safety gate: cap, danger check, HITL, audit, execute, redact.
     一体化安全门：调用上限、危险判定、人工确认、审计、执行、脱敏。
@@ -69,12 +70,22 @@ def guarded_call_tool(
             可选审计日志文件路径。
         actor: Actor label recorded in audit entries.
             审计记录中的操作者标识。
+        allowed_tools: Optional hard allowlist of tool names; calls outside it
+            are rejected at this chokepoint regardless of prompt content.
+            可选的工具名硬白名单；不在其中的调用在此入口被拒绝，不依赖提示词过滤。
 
     Returns:
         GuardedResult with observation and blocked flag.
             含 observation 与 blocked 标志的 GuardedResult。
     """
     store = store if store is not None else STORE
+
+    if allowed_tools is not None and tool_name not in allowed_tools:
+        record_guardrail_block(tool_name)
+        return GuardedResult(
+            observation=f"Tool {tool_name} is not allowed in this agent context.",
+            blocked=True,
+        )
 
     if calls > max_calls:
         return GuardedResult(

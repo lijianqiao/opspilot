@@ -62,6 +62,7 @@ class AgentState(TypedDict):
     steps_taken: int
     max_steps: int
     tool_calls: int
+    allowed_tools: list[str] | None
 
 
 # --- Nodes ---
@@ -117,12 +118,15 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
             "tool_calls": state["tool_calls"],
         }
     calls = state["tool_calls"] + 1
+    allowed = state.get("allowed_tools")
+    allowed_tools = set(allowed) if allowed is not None else None
     result = guarded_call_tool(
         parsed.action,
         parsed.action_input,
         calls=calls,
         max_calls=get_settings().agent_max_tool_calls,
         confirmed_request_id=state.get("confirmed_request_id"),
+        allowed_tools=allowed_tools,
     )
     return {
         "messages": [{"role": "user", "content": f"Observation: {result.observation}"}],
@@ -223,6 +227,7 @@ async def run_react_graph(
         "steps_taken": 0,
         "max_steps": max_steps,
         "tool_calls": 0,
+        "allowed_tools": sorted(tool_filter) if tool_filter else None,
     }
 
     result = await _compiled_graph.ainvoke(initial_state)
@@ -282,6 +287,7 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
             "steps_taken": 0,
             "max_steps": max_steps,
             "tool_calls": 0,
+            "allowed_tools": None,
         }
         result = await compiled.ainvoke(initial_state, config=config)
         for msg in reversed(result["messages"]):

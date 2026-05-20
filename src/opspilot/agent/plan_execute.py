@@ -147,6 +147,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
             calls=calls,
             max_calls=get_settings().agent_max_tool_calls,
             confirmed_request_id=state.get("confirmed_request_id"),
+            allowed_tools=_pe_tool_filter.get(),
         )
         result = guarded.observation
     elif parsed.final is not None:
@@ -256,7 +257,7 @@ async def run_plan_execute(
             综合最终答案、最后一步结果或步数上限提示。
     """
     _current_llm.set(llm)
-    _pe_tool_filter.set(tool_filter)
+    token = _pe_tool_filter.set(tool_filter)
     init: dict[str, Any] = {
         "question": question,
         "confirmed_request_id": confirmed_request_id,
@@ -268,7 +269,10 @@ async def run_plan_execute(
         "max_steps": max_steps,
         "tool_calls": 0,
     }
-    result = await _compiled.ainvoke(init, config={"recursion_limit": 100})
+    try:
+        result = await _compiled.ainvoke(init, config={"recursion_limit": 100})
+    finally:
+        _pe_tool_filter.reset(token)
     if result["final"]:
         return result["final"]
     if result["steps_taken"] >= max_steps:
