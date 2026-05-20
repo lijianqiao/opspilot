@@ -38,9 +38,7 @@ def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: 
                             "tag": "button",
                             "text": {"tag": "plain_text", "content": "确认执行"},
                             "type": "primary",
-                            "value": json.dumps(
-                                {"action": "confirm", "request_id": request_id, "token": token}
-                            ),
+                            "value": json.dumps({"action": "confirm", "request_id": request_id, "token": token}),
                         },
                         {
                             "tag": "button",
@@ -56,8 +54,6 @@ def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: 
     )
 
 
-def confirm_from_card(
-    request_id: str, token: str, actor: str, store: ConfirmationStore | None = None
-) -> bool:
+def confirm_from_card(request_id: str, token: str, actor: str, store: ConfirmationStore | None = None) -> bool:
     """Thin adapter: 飞书卡片回调拿到 (request_id, token, actor) → 委托 STORE 放行。"""
     return (store if store is not None else STORE).confirm(request_id, token, actor)

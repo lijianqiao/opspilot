@@ -141,11 +141,7 @@ def _send_card(client: lark.Client, chat_id: str, card_json: str) -> None:
         CreateMessageRequest.builder()
         .receive_id_type("chat_id")
         .request_body(
-            CreateMessageRequestBody.builder()
-            .receive_id(chat_id)
-            .msg_type("interactive")
-            .content(card_json)
-            .build()
+            CreateMessageRequestBody.builder().receive_id(chat_id).msg_type("interactive").content(card_json).build()
         )
         .build()
     )

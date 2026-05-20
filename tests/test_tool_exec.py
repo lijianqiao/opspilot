@@ -21,9 +21,7 @@ def test_safe_tool_executes_and_audits(tmp_path) -> None:
 
 
 def test_cap_exceeded_blocks() -> None:
-    r = guarded_call_tool(
-        "kubectl_get", "pods", calls=9, max_calls=8, store=ConfirmationStore(300)
-    )
+    r = guarded_call_tool("kubectl_get", "pods", calls=9, max_calls=8, store=ConfirmationStore(300))
     assert r.blocked is True
     assert "上限" in r.observation
 
