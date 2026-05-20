@@ -144,6 +144,24 @@ def test_guarded_call_rejects_tool_not_in_allowed_set(tmp_path) -> None:
     assert "not allowed" in result.observation.lower()
 
 
+def test_generic_restart_service_requires_confirmation(tmp_path) -> None:
+    """
+    Verify the generic high-risk restart_service tool is blocked pending HITL.
+
+    验证：通用高危 restart_service 工具会被拦截并登记人工确认。
+    """
+    result = guarded_call_tool(
+        "restart_service",
+        '{"service":"user-service","env":"staging"}',
+        calls=1,
+        max_calls=8,
+        store=ConfirmationStore(300),
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    assert result.blocked is True
+    assert result.request_id
+
+
 def test_observation_redacted(tmp_path) -> None:
     """
     Verify observation redacted.

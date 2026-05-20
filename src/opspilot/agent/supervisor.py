@@ -26,13 +26,16 @@ _INTENT_RE = re.compile(r"INTENT:\s*(\S+)", re.IGNORECASE)
 
 # Tool sets per agent type
 _LOG_ANALYZER_TOOLS = {"query_loki", "kubectl_get", "query_prometheus", "aggregate_errors", "tail_pod_logs"}
-_K8S_OPERATOR_TOOLS = {
+_OPS_OPERATOR_TOOLS = {
     "kubectl_get",
     "kubectl_describe",
     "kubectl_scale",
     "kubectl_rollout_restart",
     "confirm_dangerous_op",
     "query_prometheus",
+    "restart_service",
+    "scale_service",
+    "run_remediation",
 }
 _GENERIC_TOOLS = {"get_pod_status", "kubectl_get", "kubectl_describe", "query_loki", "query_prometheus"}
 
@@ -44,7 +47,7 @@ class SupervisorState(TypedDict):
     Attributes:
         question: Original user message.
             用户原始消息。
-        intent: Classified intent label (log_analyzer, k8s_operator, generic_react).
+        intent: Classified intent label (log_analyzer, ops_operator, generic_react).
             分类后的意图标签。
         final_answer: Sub-agent result returned to the caller.
             子智能体返回给调用方的最终答案。
@@ -67,8 +70,8 @@ def _llm() -> SupportsChat:
 
 
 async def classify_node(state: SupervisorState) -> dict[str, Any]:
-    """Classify user intent into log_analyzer, k8s_operator, or generic_react.
-    将用户意图分类为 log_analyzer、k8s_operator 或 generic_react。
+    """Classify user intent into log_analyzer, ops_operator, or generic_react.
+    将用户意图分类为 log_analyzer、ops_operator 或 generic_react。
 
     Args:
         state: Current supervisor state with question.
@@ -82,7 +85,7 @@ async def classify_node(state: SupervisorState) -> dict[str, Any]:
         "你是 OpsPilot 的意图分类器。分析用户消息，回复 INTENT: <类别>。\n\n"
         "类别定义：\n"
         "- log_analyzer: 查日志、错误统计、日志分析、查看 pod 日志\n"
-        "- k8s_operator: K8s 资源操作、扩缩容、重启、describe、pod 状态\n"
+        "- ops_operator: 服务/基础设施动作（重启、扩缩容、补救、发布操作），以及 K8s 资源操作\n"
         "- generic_react: 其他运维问题或不清楚意图\n\n"
         f"用户消息：{state['question']}\n\n"
         "只回复 INTENT: <类别>，不要输出其他内容。"
@@ -115,9 +118,9 @@ async def log_analyzer_node(state: SupervisorState) -> dict[str, Any]:
     return {"final_answer": answer}
 
 
-async def k8s_operator_node(state: SupervisorState) -> dict[str, Any]:
-    """Run the K8s Operator sub-agent (Plan-Execute with K8s tools).
-    运行 K8s 操作子智能体（Plan-Execute，K8s 工具集）。
+async def ops_operator_node(state: SupervisorState) -> dict[str, Any]:
+    """Run the Ops Operator sub-agent (Plan-Execute with service/infra action tools).
+    运行运维操作子智能体（Plan-Execute，服务/基础设施动作工具集）。
 
     Args:
         state: Supervisor state with question.
@@ -132,7 +135,7 @@ async def k8s_operator_node(state: SupervisorState) -> dict[str, Any]:
     answer = await run_plan_execute(
         state["question"],
         _llm(),
-        tool_filter=_K8S_OPERATOR_TOOLS,
+        tool_filter=_OPS_OPERATOR_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
     )
     return {"final_answer": answer}
@@ -163,8 +166,9 @@ def _route_by_intent(state: SupervisorState) -> str:
     intent = state.get("intent", "generic_react")
     if intent == "log_analyzer":
         return "log_analyzer"
-    if intent == "k8s_operator":
-        return "k8s_operator"
+    # Backwards-compatible: accept legacy "k8s_operator" label.
+    if intent in {"ops_operator", "k8s_operator"}:
+        return "ops_operator"
     return "generic_react"
 
 
@@ -172,7 +176,7 @@ def _build_supervisor_graph() -> Any:
     g = StateGraph(SupervisorState)
     g.add_node("classify", classify_node)
     g.add_node("log_analyzer", log_analyzer_node)
-    g.add_node("k8s_operator", k8s_operator_node)
+    g.add_node("ops_operator", ops_operator_node)
     g.add_node("generic_react", generic_react_node)
     g.add_edge(START, "classify")
     g.add_conditional_edges(
@@ -180,12 +184,12 @@ def _build_supervisor_graph() -> Any:
         _route_by_intent,
         {
             "log_analyzer": "log_analyzer",
-            "k8s_operator": "k8s_operator",
+            "ops_operator": "ops_operator",
             "generic_react": "generic_react",
         },
     )
     g.add_edge("log_analyzer", END)
-    g.add_edge("k8s_operator", END)
+    g.add_edge("ops_operator", END)
     g.add_edge("generic_react", END)
     return g.compile()
 

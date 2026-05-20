@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import opspilot.tools  # noqa: F401 - register built-in tools before execution
 from opspilot.agent.confirmation import STORE, ConfirmationStore
 from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.observability.audit import record_operation

@@ -22,6 +22,7 @@ from opspilot.tools.registry import (
     register_tool,
 )
 from opspilot.tools.runbook import retrieve_runbook
+from opspilot.tools.service_actions import restart_service, run_remediation, scale_service
 
 __all__ = [
     "ToolInfo",
@@ -38,6 +39,9 @@ __all__ = [
     "query_loki",
     "query_prometheus",
     "register_tool",
+    "restart_service",
     "retrieve_runbook",
+    "run_remediation",
+    "scale_service",
     "tail_pod_logs",
 ]
