@@ -25,9 +25,7 @@ def test_write_tools_registered_as_high_risk() -> None:
 
 
 def test_scale_exposes_rollback_prev_replicas() -> None:
-    info = rollback_info_for(
-        "kubectl_scale", '{"deployment": "user-service", "replicas": 0, "namespace": "default"}'
-    )
+    info = rollback_info_for("kubectl_scale", '{"deployment": "user-service", "replicas": 0, "namespace": "default"}')
     assert info == {"deployment": "user-service", "replicas": 3, "namespace": "default"}
 
 
