@@ -27,3 +27,6 @@ docs/superpowers/
 
 # vscode
 .vscode/
+
+# logs
+logs/
