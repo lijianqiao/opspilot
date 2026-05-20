@@ -1,5 +1,8 @@
 """Hand-written ReAct loop — Stage 0 reference implementation, enhanced for Stage 1.
 
+⚠️ 学习参照实现：无 guardrails（无 is_dangerous / redact / 人工确认门 / 审计）。
+禁止接入任何 entrypoint。生产路径请用 langgraph_agent / plan_execute（经 guarded_call_tool）。
+
 This module is the learning artifact: the same ReAct logic as the LangGraph
 version (langgraph_agent.py) but implemented without any framework. Kept
 as a reference for the stage summary comparison.

@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_TOP_K = 3
 _DENSE_PREFETCH_LIMIT = 50
-_FALLBACK_TEXT = (
+
+# 单一来源：RAG 无命中与 runbook 关键词兜底共用同一通用排查文案
+FALLBACK_RUNBOOK_TEXT = (
     "通用故障排查步骤：\n"
     "1. 确认故障影响范围（哪些服务/用户受影响）\n"
     "2. 查看最近部署和变更记录\n"
@@ -77,7 +79,7 @@ class RetrievalService:
         """
         docs = self.retrieve(query, top_k=top_k)
         if not docs:
-            return _FALLBACK_TEXT
+            return FALLBACK_RUNBOOK_TEXT
 
         parts: list[str] = []
         for i, doc in enumerate(docs, 1):

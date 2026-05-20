@@ -65,9 +65,7 @@ def test_alert_rejects_bad_signature(client: TestClient, hmac_secret: str) -> No
     assert response.status_code == 401
 
 
-def test_alert_fail_closed_when_secret_unconfigured(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_alert_fail_closed_when_secret_unconfigured(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from opspilot.config import get_settings
 
     monkeypatch.setenv("OPSPILOT_ALERTMANAGER_HMAC_SECRET", "")

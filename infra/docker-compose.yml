@@ -3,11 +3,11 @@ services:
     image: postgres:17-alpine
     container_name: opspilot-postgres
     environment:
-      POSTGRES_USER: opspilot
-      POSTGRES_PASSWORD: opspilot
-      POSTGRES_DB: opspilot
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot}
+      POSTGRES_DB: ${POSTGRES_DB:-opspilot}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - opspilot_pgdata:/var/lib/postgresql/data
 
@@ -31,11 +31,14 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: opspilot-agent-core
+    env_file:
+      - .env
     environment:
       OPSPILOT_LLM_BASE_URL: ${OPSPILOT_LLM_BASE_URL:-http://host.docker.internal:8080/v1}
       OPSPILOT_LLM_MODEL: ${OPSPILOT_LLM_MODEL:-qwen3.5-9b}
       OPSPILOT_LLM_API_KEY: ${OPSPILOT_LLM_API_KEY:-sk-local}
-      OPSPILOT_PG_DSN: postgresql://opspilot:opspilot@postgres:5432/opspilot
+      # 容器网络内主机名 postgres；与 POSTGRES_* 凭据同源，避免与 compose 硬编码两套密码
+      OPSPILOT_PG_DSN: postgresql://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot}@postgres:5432/${POSTGRES_DB:-opspilot}
     ports:
       - "8000:8000"
     depends_on:

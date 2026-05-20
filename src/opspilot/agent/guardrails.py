@@ -13,8 +13,16 @@ from opspilot.tools.registry import get_registered_tools
 
 # Destructive intent in the raw tool input, regardless of tool risk level.
 _DANGEROUS_INPUT_RE = re.compile(
-    r"\b(rm\s+-rf|drop\s+table|drop\s+database|delete\s+from|truncate|"
-    r"mkfs|shutdown|reboot|kill\s+-9|:\s*0\s*$)|--force\b|\bscale\b.*\b0\b",
+    r"\b("
+    r"rm\s+-rf|"  # 递归强制删除
+    r"drop\s+table|drop\s+database|"  # SQL 删表/库
+    r"delete\s+from|truncate|"  # 批量删数据
+    r"mkfs|"  # 格式化磁盘
+    r"shutdown|reboot|"  # 关机/重启
+    r"kill\s+-9|"  # 强制杀进程
+    r":\s*0\s*$"  # YAML/配置里 replicas/resources 缩到 0 的简写
+    r")|--force\b|"  # 强制标志（如 kubectl delete --force）
+    r"\bscale\b.*\b0\b",  # kubectl scale ... 0
     re.IGNORECASE,
 )
 

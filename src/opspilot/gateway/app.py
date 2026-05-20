@@ -17,6 +17,7 @@ async def _proxy_chat(provider: GatewayProvider, payload: dict[str, Any], timeou
     async with httpx.AsyncClient(timeout=timeout) as client:
         return await client.post(
             f"{provider.base_url}/chat/completions",
+            # OpenAI 兼容上游：Authorization: Bearer <api_key>
             headers={"Authorization": f"Bearer {provider.api_key}"},
             json=payload,
         )

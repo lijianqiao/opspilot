@@ -26,9 +26,7 @@ app = FastAPI(title="OpsPilot Alert Handler")
 
 
 @app.post("/alert")
-async def receive_alert(
-    request: Request, x_opspilot_signature: str = Header(default="")
-) -> dict[str, str]:
+async def receive_alert(request: Request, x_opspilot_signature: str = Header(default="")) -> dict[str, str]:
     """Receive Alertmanager webhook, verify HMAC signature, return diagnosis."""
     raw_body = await request.body()
     # Fail-closed on unconfigured secret; raises HTTPException(401) on bad sig.

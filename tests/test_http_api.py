@@ -59,9 +59,7 @@ async def test_ask_delegates_to_agent(auth_token: str) -> None:
     app = create_app(agent=fake_agent)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/ask", json={"question": "default 有哪些 pod 不正常"}, headers=_bearer(auth_token)
-        )
+        resp = await client.post("/ask", json={"question": "default 有哪些 pod 不正常"}, headers=_bearer(auth_token))
     assert resp.status_code == 200
     assert resp.json() == {"answer": "answer: default 有哪些 pod 不正常"}
 

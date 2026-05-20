@@ -83,6 +83,7 @@ class LLMClient:
                 with attempt:
                     resp = await self._client.post(
                         f"{self._settings.llm_base_url}/chat/completions",
+                        # OpenAI 兼容 API：Authorization: Bearer <api_key>
                         headers={"Authorization": f"Bearer {self._settings.llm_api_key}"},
                         json={
                             "model": self._settings.llm_model,
@@ -105,6 +106,7 @@ class LLMClient:
         finally:
             elapsed = time.perf_counter() - started
             text = "".join(msg.get("content", "") for msg in messages if isinstance(msg, dict))
+            # // 4 ≈ 英文每 token 约 4 字符的粗略估算，仅用于指标，非计费
             token_estimate = max((len(text) + len(content)) // 4, 1)
             record_llm_call(
                 provider=self._settings.llm_base_url,

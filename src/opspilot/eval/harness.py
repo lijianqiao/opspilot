@@ -6,8 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from opspilot.agent.langgraph_agent import run_react_graph
+from opspilot.agent.langgraph_agent import _FINAL_RE, _compiled_graph, _current_llm, run_react_graph
+from opspilot.config import get_settings
 from opspilot.eval.cases import CASES, EvalCase
+from opspilot.tools.registry import build_tools_prompt
 
 
 class _ScriptedLLM:
@@ -36,9 +38,46 @@ class EvalResult:
         return self.tool_sequence_ok and self.danger_blocked_ok and self.answer_keywords_ok
 
 
+async def _run_with_trace(case: EvalCase, llm: _ScriptedLLM) -> tuple[str, str]:
+    """Run graph and return (final_answer, full_message_text_for_trace_checks)."""
+    _current_llm.set(llm)
+    initial_state: dict[str, object] = {
+        "messages": [
+            {"role": "system", "content": f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"},
+            {"role": "user", "content": case.question},
+        ],
+        "question": case.question,
+        "steps_taken": 0,
+        "max_steps": case.max_steps,
+        "tool_calls": 0,
+    }
+    result = await _compiled_graph.ainvoke(initial_state)
+    messages = result.get("messages", [])
+    trace = "\n".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
+
+    if result.get("tool_calls", 0) > get_settings().agent_max_tool_calls:
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                if final := _FINAL_RE.search(str(msg.get("content", ""))):
+                    return final.group(1).strip(), trace
+        return "工具调用次数已达上限，已停止。", trace
+
+    for msg in reversed(messages):
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            content = str(msg.get("content", ""))
+            if final := _FINAL_RE.search(content):
+                return final.group(1).strip(), trace
+            return content.strip(), trace
+    return "未能得到最终答案。", trace
+
+
 async def run_case(case: EvalCase) -> EvalResult:
     llm = _ScriptedLLM(case.scripted_replies)
-    answer = await run_react_graph(case.question, llm, max_steps=case.max_steps)
+    if case.trace_keywords:
+        answer, trace = await _run_with_trace(case, llm)
+    else:
+        answer = await run_react_graph(case.question, llm, max_steps=case.max_steps)
+        trace = answer
 
     tool_ok = llm.seen_tools == case.expected_tool_sequence
 
@@ -49,6 +88,8 @@ async def run_case(case: EvalCase) -> EvalResult:
         danger_ok = True
 
     kw_ok = all(k in answer for k in case.answer_keywords)
+    if case.trace_keywords:
+        kw_ok = kw_ok and all(k in trace for k in case.trace_keywords)
 
     return EvalResult(case.name, tool_ok, danger_ok, kw_ok)
 

@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from opspilot.rag.retrieval import FALLBACK_RUNBOOK_TEXT
 from opspilot.tools.registry import register_tool
+
+if TYPE_CHECKING:
+    from opspilot.rag.retrieval import RetrievalService
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +26,26 @@ _FIXTURES_DIR = Path(__file__).parent.parent.parent.parent / "fixtures"
 # Stub fallback (original Stage 3 keyword-match) — used when Qdrant is down
 # ---------------------------------------------------------------------------
 
-_RUNBOOKS: list[dict] = []
+_RUNBOOKS: list[dict[str, object]] = []
+_runbooks_lock = threading.Lock()
+
+_retrieval_service: RetrievalService | None = None
+_init_error: str | None = None
+_retrieval_lock = threading.Lock()
 
 
-def _load_runbooks() -> list[dict]:
+def _load_runbooks() -> list[dict[str, object]]:
+    """Load fixture runbooks once (thread-safe, idempotent)."""
     global _RUNBOOKS
     if _RUNBOOKS:
         return _RUNBOOKS
-    for path in sorted(_FIXTURES_DIR.glob("runbook_*.json")):
-        _RUNBOOKS.append(json.loads(path.read_text(encoding="utf-8")))
+    with _runbooks_lock:
+        if _RUNBOOKS:
+            return _RUNBOOKS
+        loaded: list[dict[str, object]] = []
+        for path in sorted(_FIXTURES_DIR.glob("runbook_*.json")):
+            loaded.append(json.loads(path.read_text(encoding="utf-8")))
+        _RUNBOOKS = loaded
     return _RUNBOOKS
 
 
@@ -36,35 +53,26 @@ def _keyword_fallback(query: str) -> str:
     """Original keyword-match fallback (Stage 3 stub behavior)."""
     runbooks = _load_runbooks()
     query_lower = query.lower()
-    best = None
+    best: dict[str, object] | None = None
     best_score = 0
     for rb in runbooks:
-        score = sum(1 for kw in rb["keywords"] if kw.lower() in query_lower)
+        keywords = rb.get("keywords", [])
+        if not isinstance(keywords, list):
+            continue
+        score = sum(1 for kw in keywords if isinstance(kw, str) and kw.lower() in query_lower)
         if score > best_score:
             best_score = score
             best = rb
     if best and best_score > 0:
-        return f"=== {best['name']} ===\n\n" + "\n".join(best["steps"])
-    return (
-        "通用故障排查步骤：\n"
-        "1. 确认故障影响范围（哪些服务/用户受影响）\n"
-        "2. 查看最近部署和变更记录\n"
-        "3. 检查服务日志（kubectl logs / Loki query）\n"
-        "4. 检查资源使用（kubectl top / Prometheus）\n"
-        "5. 检查依赖服务状态\n"
-        "6. 如果无法定位，升级到 on-call"
-    )
+        name = str(best.get("name", "Runbook"))
+        steps = best.get("steps", [])
+        if isinstance(steps, list):
+            step_lines = "\n".join(str(s) for s in steps)
+            return f"=== {name} ===\n\n{step_lines}"
+    return FALLBACK_RUNBOOK_TEXT
 
 
-# ---------------------------------------------------------------------------
-# RAG retrieval — used when Qdrant is available
-# ---------------------------------------------------------------------------
-
-_retrieval_service = None
-_init_error: str | None = None
-
-
-def _get_retrieval_service():
+def _get_retrieval_service() -> RetrievalService | None:
     """Lazy-init RetrievalService. Returns None if Qdrant is unavailable."""
     global _retrieval_service, _init_error
     if _retrieval_service is not None:
@@ -72,26 +80,32 @@ def _get_retrieval_service():
     if _init_error is not None:
         return None
 
-    try:
-        from opspilot.rag.embedding import EmbeddingService
-        from opspilot.rag.qdrant_store import QdrantStore
-        from opspilot.rag.retrieval import RetrievalService
-
-        store = QdrantStore()
-        if store.point_count() == 0:
-            logger.warning("Qdrant collection is empty, falling back to keyword match")
-            store.close()
-            _init_error = "empty collection"
+    with _retrieval_lock:
+        if _retrieval_service is not None:
+            return _retrieval_service
+        if _init_error is not None:
             return None
 
-        emb_svc = EmbeddingService()
-        _retrieval_service = RetrievalService(store=store, embedding_service=emb_svc)
-        logger.info("RAG retrieval service initialized (%d docs)", store.point_count())
-        return _retrieval_service
-    except Exception as exc:
-        _init_error = str(exc)
-        logger.warning("Qdrant unavailable (%s), falling back to keyword match", exc)
-        return None
+        try:
+            from opspilot.rag.embedding import EmbeddingService
+            from opspilot.rag.qdrant_store import QdrantStore
+            from opspilot.rag.retrieval import RetrievalService
+
+            store = QdrantStore()
+            if store.point_count() == 0:
+                logger.warning("Qdrant collection is empty, falling back to keyword match")
+                store.close()
+                _init_error = "empty collection"
+                return None
+
+            emb_svc = EmbeddingService()
+            _retrieval_service = RetrievalService(store=store, embedding_service=emb_svc)
+            logger.info("RAG retrieval service initialized (%d docs)", store.point_count())
+            return _retrieval_service
+        except Exception as exc:
+            _init_error = str(exc)
+            logger.warning("Qdrant unavailable (%s), falling back to keyword match", exc)
+            return None
 
 
 @register_tool

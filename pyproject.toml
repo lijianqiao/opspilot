@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "一个用 LLM Agent 驱动的运维智能助手平台"
 readme = "README.md"
 requires-python = ">=3.12"
+# 依赖策略：声明下限 (>=) 保证最低兼容版本；可复现安装以提交的 uv.lock 为准。
+# 生产环境按需收紧上限，避免主版本意外升级；开发组见 [dependency-groups].dev。
 dependencies = [
     "httpx>=0.28.1",
     "pydantic-settings>=2.14.1",
