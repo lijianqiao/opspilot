@@ -6,12 +6,24 @@
 
 ## 目录
 
+0. [生产部署假设 (Production assumptions for this MVP)](#0-生产部署假设-production-assumptions-for-this-mvp)
 1. [环境准备](#1-环境准备)
 2. [克隆代码与配置](#2-克隆代码与配置)
 3. [启动服务](#3-启动服务)
 4. [功能测试](#4-功能测试)（[§4.1 飞书联调](#41-飞书联调主路径) 为主）
 5. [常见问题](#5-常见问题)
 6. [附录：其他 LLM 接入方式](#6-附录其他-llm-接入方式)
+
+---
+
+## 0. 生产部署假设 (Production assumptions for this MVP)
+
+当前阶段的生产部署边界（Production assumptions for this MVP）：
+
+- **agent-core runs as a single replica.** 单副本部署即可承载现有负载；`ConfirmationStore` 等内存态尚未做多副本同步，扩多副本前需先抽到外部存储。
+- **Infrastructure dependencies are internal-only.** `agent-core:8000`、Qdrant、Redis、Postgres、Grafana 仅在内网/VPC 暴露；外部访问只通过经过鉴权的渠道适配器（飞书 / 反向代理后的 HTTP）。
+- **Audit source is `logs/opspilot_audit.jsonl`** and must be externally collected, backed up, protected from tampering, and monitored for disk-full conditions. 高危操作会先写一条 `approved` 审计再执行，若磁盘满或写失败，**操作不会执行**——所以磁盘容量与采集链路属于必须监控项。
+- **Secrets may come from `.env` for MVP**; `.env` must not be committed and should be readable only by the service user（例如 `chmod 600 .env` 并归属运行 `agent-core` 的用户）。后续接入 KMS / Vault 后再迁移。
 
 ---
 
