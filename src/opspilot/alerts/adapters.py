@@ -49,7 +49,7 @@ def normalize_alert_payload(payload: dict[str, Any], source: str = "alertmanager
         NormalizedAlertEvent containing one or more NormalizedAlert items.
             含一个或多个 NormalizedAlert 的归一化事件。
     """
-    source_key = (source or payload.get("source") or "alertmanager")
+    source_key = source or payload.get("source") or "alertmanager"
     source_key = str(source_key).strip().lower()
     if source_key == "alertmanager":
         return _from_alertmanager(payload)

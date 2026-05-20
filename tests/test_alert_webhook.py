@@ -178,9 +178,7 @@ def test_alert_fail_closed_when_secret_unconfigured(client: TestClient, monkeypa
         get_settings.cache_clear()
 
 
-def test_alert_normalizes_zabbix_payload(
-    client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_alert_normalizes_zabbix_payload(client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Verify Zabbix-sourced webhooks bypass alertmanager validation and normalize correctly.
 
