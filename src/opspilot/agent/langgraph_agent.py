@@ -19,20 +19,17 @@ from typing import Annotated, Any
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.agent.protocols import SupportsChat
-from opspilot.agent.react_protocol import (
-    ACTION_INPUT_RE as _ACTION_INPUT_RE,
-)
 from opspilot.agent.react_protocol import (
     ACTION_RE as _ACTION_RE,
 )
 from opspilot.agent.react_protocol import (
     FINAL_RE as _FINAL_RE,
 )
+from opspilot.agent.react_protocol import parse_react_output
+from opspilot.agent.tool_exec import guarded_call_tool
 from opspilot.config import get_settings
-from opspilot.observability.metrics import record_guardrail_block
-from opspilot.tools.registry import build_tools_prompt, call_tool
+from opspilot.tools.registry import build_tools_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -77,51 +74,23 @@ async def agent_node(state: AgentState) -> dict[str, Any]:
 
 
 async def tool_node(state: AgentState) -> dict[str, Any]:
-    """Parse Action, enforce guardrails, execute tool, return redacted Observation."""
+    """Parse Action, route through unified guarded_call_tool, return Observation."""
     last_msg = state["messages"][-1]["content"]
-
-    action = _ACTION_RE.search(last_msg)
-    if not action:
+    parsed = parse_react_output(last_msg)
+    if parsed.action is None:
         return {
             "messages": [{"role": "user", "content": "Observation: 未检测到 Action。"}],
             "tool_calls": state["tool_calls"],
         }
-
-    tool_name = action.group(1)
-    arg_match = _ACTION_INPUT_RE.search(last_msg)
-    raw_input = arg_match.group(1).strip() if arg_match else ""
-
     calls = state["tool_calls"] + 1
-    max_calls = get_settings().agent_max_tool_calls
-    if calls > max_calls:
-        return {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"Observation: 工具调用次数已达上限（{max_calls}），停止。请直接给出 Final Answer。",
-                }
-            ],
-            "tool_calls": calls,
-        }
-
-    if is_dangerous(tool_name, raw_input):
-        record_guardrail_block(tool_name)
-        return {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": (
-                        f"Observation: 危险操作被拦截，需人工确认：{tool_name} {raw_input}。"
-                        " 未经确认不会执行。如需放行，调用 confirm_dangerous_op 并在 Action Input 提供 token=CONFIRM。"
-                    ),
-                }
-            ],
-            "tool_calls": calls,
-        }
-
-    observation = redact(call_tool(tool_name, raw_input))
+    result = guarded_call_tool(
+        parsed.action,
+        parsed.action_input,
+        calls=calls,
+        max_calls=get_settings().agent_max_tool_calls,
+    )
     return {
-        "messages": [{"role": "user", "content": f"Observation: {observation}"}],
+        "messages": [{"role": "user", "content": f"Observation: {result.observation}"}],
         "tool_calls": calls,
     }
 
