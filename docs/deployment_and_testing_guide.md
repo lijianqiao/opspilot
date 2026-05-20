@@ -1,14 +1,15 @@
 # OpsPilot 部署与测试指南
 
 > **目标环境**：Ubuntu 24.04 虚拟机（如 VMware Workstation 中的 Guest）+ Docker Compose。  
-> **推荐 LLM**：云端 OpenAI-compatible API（DeepSeek / 硅基流动 / OpenAI 等），虚拟机无需 GPU、无需本地 llama.cpp。
+> **推荐 LLM**：云端 OpenAI-compatible API（DeepSeek / 硅基流动 / OpenAI 等），虚拟机无需 GPU、无需本地 llama.cpp。  
+> **主联调路径**：飞书群/私聊 → `feishu-bot` 容器 → `agent-core`（HTTP）；curl `/ask` 仅作辅助验证。
 
 ## 目录
 
 1. [环境准备](#1-环境准备)
 2. [克隆代码与配置](#2-克隆代码与配置)
 3. [启动服务](#3-启动服务)
-4. [功能测试](#4-功能测试)
+4. [功能测试](#4-功能测试)（[§4.1 飞书联调](#41-飞书联调主路径) 为主）
 5. [常见问题](#5-常见问题)
 6. [附录：其他 LLM 接入方式](#6-附录其他-llm-接入方式)
 
@@ -33,7 +34,7 @@ docker compose version
 ```bash
 sudo apt-get update
 sudo apt-get install -y git curl
-# 后续跑单元测试需要 uv，见 §4.5
+# 后续跑单元测试需要 uv，见 §4.6
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env   # 或按安装脚本提示
 ```
@@ -79,16 +80,16 @@ OPSPILOT_LLM_BASE_URL=https://api.deepseek.com/v1
 OPSPILOT_LLM_MODEL=deepseek-chat
 OPSPILOT_LLM_API_KEY=sk-你的云端密钥
 
-# ---- HTTP API 鉴权（必填，否则 /ask、/alert 返回 503）----
+# ---- HTTP API 鉴权（必填：agent-core 与 feishu-bot 共用同一 token）----
 OPSPILOT_API_AUTH_TOKEN=请设置一串随机密钥-仅联调可自拟
 
-# ---- 飞书 Bot（启用 feishu-bot 容器时必填）----
-# OPSPILOT_FEISHU_APP_ID=
-# OPSPILOT_FEISHU_APP_SECRET=
-# OPSPILOT_FEISHU_VERIFICATION_TOKEN=
-# OPSPILOT_FEISHU_ENCRYPT_KEY=
-# feishu-bot 容器内由 compose 覆盖为 http://agent-core:8000
-# OPSPILOT_AGENT_CORE_URL=http://localhost:8000
+# ---- 飞书 Bot（飞书联调必填，与开放平台应用一致）----
+OPSPILOT_FEISHU_APP_ID=cli_xxxxxxxx
+OPSPILOT_FEISHU_APP_SECRET=xxxxxxxx
+OPSPILOT_FEISHU_VERIFICATION_TOKEN=xxxxxxxx
+OPSPILOT_FEISHU_ENCRYPT_KEY=xxxxxxxx
+# 宿主机本地跑 opspilot-feishu 时用 localhost；Compose 内 feishu-bot 会被覆盖为 http://agent-core:8000
+OPSPILOT_AGENT_CORE_URL=http://localhost:8000
 
 # ---- 可选：告警 Webhook 验签（不配则 /alert 同样 503）----
 # OPSPILOT_ALERTMANAGER_HMAC_SECRET=
@@ -123,16 +124,40 @@ curl -s https://api.deepseek.com/v1/chat/completions \
 
 能返回 JSON 即可继续。
 
-### 2.4 联调用的 curl 鉴权变量（可选）
+### 2.4 飞书开放平台（联调前 checklist）
+
+在 [飞书开放平台](https://open.feishu.cn/app) 创建企业自建应用后：
+
+| 项 | 说明 |
+| ---- | ---- |
+| **权限** | 开通「接收消息」「发送消息」「获取群组信息」等 IM 相关权限并发布版本 |
+| **事件订阅** | 启用 **长连接（WebSocket）** 模式（与 `lark-oapi` WS 一致，无需公网回调 URL） |
+| **机器人** | 将应用添加为群机器人，或在与机器人的私聊中 @ 机器人 |
+| **凭证** | 将 App ID / App Secret、事件订阅的 Verification Token、Encrypt Key 填入根目录 `.env` 四项 `OPSPILOT_FEISHU_*` |
+
+`OPSPILOT_API_AUTH_TOKEN` 与 `OPSPILOT_FEISHU_*` 须同时配置：`feishu-bot` 调 agent-core 的 `/ask` 等接口需要 Bearer，与 curl 测试使用**同一 token**。
+
+### 2.5 联调用的 shell 变量（可选）
 
 ```bash
-# 写入当前 shell，后续测试命令可直接引用
-export OPSPILOT_API_AUTH_TOKEN='你在根目录 .env 里设置的 token'
+# 写入当前 shell，后续 curl / 文档命令可直接引用
+set -a && source .env && set +a
 ```
 
 ---
 
 ## 3. 启动服务
+
+### 3.0 Compose 命令别名（推荐）
+
+Compose 文件在 `infra/`，变量替换默认读 `infra/.env`；本项目使用**根目录** `.env`，请始终带 `--env-file .env`：
+
+```bash
+cd ~/opspilot
+alias dc='docker compose --env-file .env -f infra/docker-compose.yml'
+```
+
+下文凡 `dc` 均指上述别名；未设置别名时，将 `dc` 替换为 `docker compose --env-file .env -f infra/docker-compose.yml`。
 
 ### 3.1 启动全部容器
 
@@ -140,21 +165,29 @@ export OPSPILOT_API_AUTH_TOKEN='你在根目录 .env 里设置的 token'
 
 ```bash
 cd ~/opspilot
-docker compose --env-file .env -f infra/docker-compose.yml up -d --build
-docker compose -f infra/docker-compose.yml ps
+dc up -d --build
+dc ps
 ```
 
 预期 **7 个服务**均为 `Up`：`postgres`、`qdrant`、`redis`、`agent-core`、`feishu-bot`、`prometheus`、`grafana`。
 
 架构：**飞书 WS → `feishu-bot`（薄适配器）→ HTTP `AgentClient` → `agent-core`（唯一 Agent 运行时与确认状态机）**。
 
+仅验证 HTTP、暂不用飞书时，可不启动 `feishu-bot`：
+
+```bash
+dc up -d --build postgres qdrant redis agent-core prometheus grafana
+```
+
 ### 3.2 查看日志
 
 ```bash
-docker compose -f infra/docker-compose.yml logs -f agent-core
-docker compose -f infra/docker-compose.yml logs -f feishu-bot   # 飞书联调
+dc logs -f feishu-bot    # 飞书联调首选：WS 连接、收消息、调 agent-core
+dc logs -f agent-core    # Agent 推理、工具调用、HITL 拦截
 # Ctrl+C 退出
 ```
+
+`feishu-bot` 启动成功时日志中应出现 lark WS 连接相关信息；收到群消息后应看到向 agent-core 发起 HTTP 的轨迹（或 Agent 模式日志）。
 
 ### 3.3 健康检查（无需鉴权）
 
@@ -170,9 +203,66 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/
 
 ## 4. 功能测试
 
-以下在 **虚拟机内** 执行。`/ask`、`/alert` 必须带 **`Authorization: Bearer <OPSPILOT_API_AUTH_TOKEN>`**。
+以下在 **虚拟机内** 执行。
 
-### 4.1 `/ask` — Agent 问答
+### 4.1 飞书联调（主路径）
+
+**前置**：§3.1 已 `Up`，且 `.env` 中 LLM、`OPSPILOT_API_AUTH_TOKEN`、四项 `OPSPILOT_FEISHU_*` 均已填写。
+
+1. **看日志**（另开终端）  
+   `dc logs -f feishu-bot`
+
+2. **在飞书发消息**（群聊 @ 机器人，或私聊）  
+   - 普通问答：`default 有哪些 pod 不正常`  
+   - Plan 模式：`规划：查看 default 命名空间 pod` 或 `/plan 重启 order-service`
+
+3. **预期**  
+   - 机器人在数秒～数十秒内回复文本（首次调用云端 LLM 较慢）  
+   - `feishu-bot` 日志：收到消息 → 调用 agent-core  
+   - `agent-core` 日志：Supervisor / Plan-Execute 与工具调用
+
+4. **危险操作（HITL）**  
+   - 触发需确认的工具（如 scale）后，回复文本中含 `request_id=...`  
+   - 机器人应**自动再发一张交互确认卡片**  
+   - 点击「确认」→ toast 显示已确认；**当前版本确认后需再发一条消息**才会继续执行，不会自动续跑  
+   - 卡片回调经 `feishu-bot` → `POST /channels/feishu/card-action` → agent-core 内 `STORE.confirm`
+
+5. **排错顺序**  
+   - 无回复：先看 `feishu-bot` 是否 `Up`、WS 是否报错、四项飞书凭证是否正确  
+   - 有「处理出错」类固定文案：看 `agent-core` 日志（LLM 密钥、超时、工具异常）  
+   - 有文字但无确认卡：看回复是否含 `request_id=`；用下面 curl 查 pending 是否存在
+
+**本地不启容器、只调试飞书**（需本机已 `agent-core` 在 `localhost:8000`）：
+
+```bash
+# .env 中 OPSPILOT_AGENT_CORE_URL=http://localhost:8000
+uv run opspilot-feishu
+```
+
+#### 辅助：用 curl 验证 agent-core（与飞书共用 token）
+
+```bash
+# 应先 source .env，见 §2.5
+curl -s http://localhost:8000/healthz
+
+curl -s -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${OPSPILOT_API_AUTH_TOKEN}" \
+  -d '{"question": "default 有哪些 pod 不正常"}' | python3 -m json.tool
+```
+
+若 curl `/ask` 正常而飞书无回复，问题在飞书侧或 `feishu-bot`；若 curl 也失败，先修 `agent-core` / LLM 配置。
+
+#### 辅助：查询 pending / 模拟卡片确认（进阶）
+
+从 Agent 回复中复制 `request_id` 后：
+
+```bash
+curl -s "http://localhost:8000/channels/pending/<request_id>" \
+  -H "Authorization: Bearer ${OPSPILOT_API_AUTH_TOKEN}" | python3 -m json.tool
+```
+
+### 4.2 `/ask` — HTTP 直接问答（辅助）
 
 ```bash
 curl -s -X POST http://localhost:8000/ask \
@@ -182,9 +272,9 @@ curl -s -X POST http://localhost:8000/ask \
 ```
 
 **预期**：JSON 含 `answer` 字段；首次调用较慢（云端推理）。  
-**Plan 模式**：HTTP 请求体加 `"plan": true`，或飞书发送 `规划：` / `/plan ` 前缀（由 `feishu-bot` 转发）；CLI：`uv run opspilot ask "..." --plan`。
+**Plan 模式**：请求体加 `"plan": true`（飞书侧用 `规划：` / `/plan ` 前缀，由 `feishu-bot` 转发）。
 
-### 4.2 `/alert` — 告警诊断
+### 4.3 `/alert` — 告警诊断
 
 ```bash
 curl -s -X POST http://localhost:8000/alert \
@@ -195,13 +285,13 @@ curl -s -X POST http://localhost:8000/alert \
 
 **预期**：`status` 为 `ok`，`diagnosis` 含诊断文本。
 
-### 4.3 Prometheus 指标（无需鉴权）
+### 4.4 Prometheus 指标（无需鉴权）
 
 ```bash
 curl -s http://localhost:8000/metrics | head -30
 ```
 
-### 4.4 RAG：导入 Runbook（在 VM 宿主机执行）
+### 4.5 RAG：导入 Runbook（在 VM 宿主机执行）
 
 ```bash
 cd ~/opspilot
@@ -212,7 +302,7 @@ uv run python scripts/ingest_runbooks.py
 **预期**：`Ingestion complete: ...`。Qdrant 端口已映射到宿主机 `6333`。  
 **说明**：当前 `agent-core` 容器内 Runbook 向量检索默认连 `localhost:6333`，在容器网络中可能回退为关键词匹配；ingest 仍建议执行，CLI/宿主机脚本可正常用 RAG。
 
-### 4.5 单元测试与 Eval（无需真实 LLM）
+### 4.6 单元测试与 Eval（无需真实 LLM）
 
 ```bash
 cd ~/opspilot
@@ -223,11 +313,11 @@ uv run python scripts/run_eval.py
 # 预期：TOTAL: 18/18 passed
 ```
 
-### 4.6 Grafana（可选）
+### 4.7 Grafana（可选）
 
 浏览器打开 `http://<VM_IP>:3000`，默认 `admin` / `admin`。先执行几次 `/ask` 产生流量后再看 **OpsPilot Overview** 面板。
 
-### 4.7 一键冒烟脚本
+### 4.8 一键冒烟脚本
 
 仓库已提供 `scripts/test_deploy.sh`（读取根目录 `.env` 中的鉴权 token）：
 
@@ -236,13 +326,13 @@ chmod +x scripts/test_deploy.sh
 ./scripts/test_deploy.sh
 ```
 
-### 4.8 可选组件（不在 compose 内）
+### 4.9 其他入口（可选）
 
 | 组件 | 说明 |
 | ---- | ---- |
-| **LLM Gateway** | 宿主机 `uv run opspilot-gateway`，配置根目录 `.env` 中 `OPSPILOT_GATEWAY_*`，需 `OPSPILOT_GATEWAY_AUTH_TOKEN` |
-| **飞书 Bot** | 默认由 compose 服务 `feishu-bot` 运行；需在 `.env` 配置 `OPSPILOT_FEISHU_*` 与 `OPSPILOT_API_AUTH_TOKEN`；本地调试可 `uv run opspilot-feishu` |
-| **CLI** | `uv run opspilot ask "问题"`，读项目根 `.env` 或环境变量 |
+| **飞书 Bot** | 生产路径：`dc up` 中的 `feishu-bot` 服务；本地调试：`uv run opspilot-feishu`（需 agent-core 可达） |
+| **CLI** | `uv run opspilot ask "问题"` / `--plan`，直连 LLM，**不经过** feishu-bot（与飞书联调路径独立） |
+| **LLM Gateway** | 宿主机 `uv run opspilot-gateway`，配置 `OPSPILOT_GATEWAY_*` |
 
 ---
 
@@ -253,7 +343,7 @@ chmod +x scripts/test_deploy.sh
 未设置 `OPSPILOT_API_AUTH_TOKEN`。在根目录 `.env` 中填写非空 token，重启 agent-core：
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d agent-core
+dc up -d agent-core feishu-bot
 ```
 
 ### Q2: `/ask` 返回 401 `unauthorized`
@@ -269,26 +359,45 @@ curl ... -H "Authorization: Bearer <与上一致>"
 
 - 检查根目录 `.env` 中 `OPSPILOT_LLM_BASE_URL` / `OPSPILOT_LLM_API_KEY` / 模型名  
 - VM 能否访问外网：`curl -I https://api.deepseek.com`  
-- 查看日志：`docker compose -f infra/docker-compose.yml logs agent-core`
+- 查看日志：`dc logs agent-core`
 
 ### Q4: `agent-core` 启动失败
 
 ```bash
-docker compose -f infra/docker-compose.yml logs agent-core
+dc logs agent-core
 ```
 
-常见原因：构建失败（缺 `uv.lock`）、依赖服务未就绪。可 `docker compose ... up -d postgres qdrant redis` 后再启 `agent-core`。
+常见原因：构建失败（缺 `uv.lock`）、依赖服务未就绪。可 `dc up -d postgres qdrant redis` 后再启 `agent-core`。
 
 ### Q5: RAG ingest 失败
 
-确认 Qdrant 已启动：`docker compose -f infra/docker-compose.yml ps qdrant`，再重试 `uv run python scripts/ingest_runbooks.py`。
+确认 Qdrant 已启动：`dc ps qdrant`，再重试 `uv run python scripts/ingest_runbooks.py`。
 
-### Q6: 停止 / 重置
+### Q6: 飞书发消息无回复
+
+1. `dc ps feishu-bot` 是否为 `Up`；`dc logs feishu-bot` 是否有 WS 连接错误  
+2. `.env` 中 `OPSPILOT_FEISHU_APP_ID` / `SECRET` / `VERIFICATION_TOKEN` / `ENCRYPT_KEY` 是否与开放平台一致  
+3. 应用是否已发布、机器人是否已加入群并 @  
+4. 事件订阅是否为 **长连接** 模式  
+5. 同机 curl `/ask`（§4.1 辅助命令）是否正常；若 curl 失败，先修 agent-core / LLM  
+6. `feishu-bot` 调 core 需 `OPSPILOT_API_AUTH_TOKEN`；与 curl 使用同一值
+
+### Q7: 飞书有回复但没有确认卡片
+
+- 回复正文是否包含 `request_id=`（未触发危险工具则不会发卡）  
+- `dc logs feishu-bot` 是否出现 `get_pending` / `sent confirm card`  
+- 用 §4.1 的 `GET /channels/pending/<id>` 确认 agent-core 侧 pending 仍存在（未过期）
+
+### Q8: 点击确认卡片后 Agent 没有继续执行
+
+当前设计：**确认只写入 STORE，不会自动发起下一轮 Agent**。请在飞书中**再发一条消息**（例如「继续执行 scale」）触发新的 `/ask`。后续版本可能增加 resume API。
+
+### Q9: 停止 / 重置
 
 ```bash
-docker compose -f infra/docker-compose.yml down
-docker compose -f infra/docker-compose.yml down -v   # 含数据卷，完全重置
-docker compose -f infra/docker-compose.yml up -d --build
+dc down
+dc down -v   # 含数据卷，完全重置
+dc up -d --build
 ```
 
 ---
