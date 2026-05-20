@@ -28,6 +28,8 @@ class GatewaySettings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     requests_per_minute: int = 60
     provider_timeout_seconds: float = 120.0
+    # 网关 Bearer 鉴权：未配置则 fail-closed（503），避免裸奔成开放代理可盗刷上游 key
+    auth_token: str = Field(default="", repr=False)
 
     @field_validator("providers", mode="before")
     @classmethod
