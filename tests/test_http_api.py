@@ -365,6 +365,79 @@ async def test_alert_normalizes_grafana_payload(monkeypatch: pytest.MonkeyPatch,
 
 
 @pytest.mark.anyio
+async def test_ask_response_echoes_supplied_trace_id(auth_token: str) -> None:
+    """
+    /ask response echoes incoming X-OpsPilot-Trace-ID for client correlation.
+
+    验证：/ask 在响应头中回显入站 X-OpsPilot-Trace-ID，便于客户端关联。
+    """
+    app = create_app(agent=fake_agent)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/ask",
+            json={"question": "x"},
+            headers={**_bearer(auth_token), "X-OpsPilot-Trace-ID": "trace-echo-a"},
+        )
+    assert resp.status_code == 200
+    assert resp.headers.get("x-opspilot-trace-id") == "trace-echo-a"
+
+
+@pytest.mark.anyio
+async def test_ask_response_mints_trace_id_when_missing(auth_token: str) -> None:
+    """
+    /ask still returns an X-OpsPilot-Trace-ID header even without incoming one.
+
+    验证：未带入站 trace id 时，/ask 仍会生成并在响应头中返回一个 trace id。
+    """
+    app = create_app(agent=fake_agent)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/ask", json={"question": "x"}, headers=_bearer(auth_token))
+    assert resp.status_code == 200
+    minted = resp.headers.get("x-opspilot-trace-id")
+    assert minted and len(minted) > 0
+
+
+@pytest.mark.anyio
+async def test_ask_trace_id_reaches_audit_log_through_guarded_call_tool(auth_token: str, tmp_path) -> None:
+    """
+    Closed loop: trace id flows from /ask middleware → fake agent → guarded_call_tool → audit JSONL.
+
+    闭环验证：trace id 从 /ask 中间件经过 agent → guarded_call_tool → 审计 JSONL 完整落盘。
+    """
+    from opspilot.agent.tool_exec import guarded_call_tool
+
+    audit_path = tmp_path / "audit.jsonl"
+
+    async def agent_runs_safe_tool(question: str) -> str:
+        # Fake agent invokes a registered safe tool through the guarded chokepoint,
+        # which writes an audit record. The ContextVar set by the trace middleware
+        # must survive across this boundary.
+        result = guarded_call_tool(
+            "get_pod_status",
+            "default",
+            calls=1,
+            max_calls=5,
+            audit_path=str(audit_path),
+        )
+        return result.observation
+
+    app = create_app(agent=agent_runs_safe_tool)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/ask",
+            json={"question": "list pods"},
+            headers={**_bearer(auth_token), "X-OpsPilot-Trace-ID": "trace-tool-a"},
+        )
+    assert resp.status_code == 200
+    assert resp.headers.get("x-opspilot-trace-id") == "trace-tool-a"
+    content = audit_path.read_text(encoding="utf-8")
+    assert '"trace_id": "trace-tool-a"' in content
+
+
+@pytest.mark.anyio
 async def test_ask_fail_closed_when_token_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Verify ask fail closed when token unconfigured.

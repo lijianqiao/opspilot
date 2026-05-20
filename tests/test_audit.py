@@ -96,3 +96,55 @@ def test_record_operation_redacts_and_truncates_input_and_result(tmp_path) -> No
     assert "hunter2" not in rec["result"]
     assert len(rec["tool_input"]) <= 2000
     assert len(rec["result"]) <= 2000
+
+
+def test_record_operation_includes_trace_id(tmp_path) -> None:
+    """
+    record_operation should embed the current trace id from ContextVar.
+
+    验证：record_operation 应从 ContextVar 读取并写入当前 trace id。
+    """
+    from opspilot.observability.audit import record_operation
+    from opspilot.observability.context import reset_trace_id, set_trace_id
+
+    log = tmp_path / "audit.jsonl"
+    token = set_trace_id("trace-a")
+    try:
+        record_operation(
+            tool="kubectl_get",
+            tool_input="pods",
+            actor="agent",
+            confirmed_by=None,
+            status="executed",
+            result="ok",
+            rollback=None,
+            path=str(log),
+        )
+    finally:
+        reset_trace_id(token)
+    rec = json.loads(log.read_text(encoding="utf-8").strip())
+    assert rec["trace_id"] == "trace-a"
+
+
+def test_record_operation_trace_id_none_when_unset(tmp_path) -> None:
+    """
+    record_operation should record trace_id=None when no ContextVar is set.
+
+    验证：未设置 trace id 时，record_operation 写入 trace_id=None，向后兼容。
+    """
+    from opspilot.observability.audit import record_operation
+
+    log = tmp_path / "audit.jsonl"
+    record_operation(
+        tool="kubectl_get",
+        tool_input="pods",
+        actor="agent",
+        confirmed_by=None,
+        status="executed",
+        result="ok",
+        rollback=None,
+        path=str(log),
+    )
+    rec = json.loads(log.read_text(encoding="utf-8").strip())
+    assert "trace_id" in rec
+    assert rec["trace_id"] is None

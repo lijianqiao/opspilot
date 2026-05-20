@@ -33,6 +33,7 @@ from opspilot.agent.guardrails import redact
 from opspilot.config import get_settings
 from opspilot.entrypoints.agent_client import AgentClient
 from opspilot.entrypoints.feishu_card import build_confirm_card
+from opspilot.observability.context import new_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,7 @@ async def _handle_via_agent_core(
             可选，发送者的飞书 open_id，用于 HITL 绑定。
     """
     stripped, use_plan = _select_agent(question)
+    trace_id = new_trace_id()
 
     async def _ask(text: str) -> str:
         return await agent_client.ask(
@@ -173,11 +175,12 @@ async def _handle_via_agent_core(
             channel="feishu",
             chat_id=chat_id,
             requester=requester,
+            trace_id=trace_id,
         )
 
     answer = await handle_question(stripped, _ask)
     _send_reply(lark_client, chat_id, answer)
-    await _maybe_send_confirm_card(lark_client, chat_id, answer, agent_client)
+    await _maybe_send_confirm_card(lark_client, chat_id, answer, agent_client, trace_id=trace_id)
 
 
 async def _maybe_send_confirm_card(
@@ -185,6 +188,8 @@ async def _maybe_send_confirm_card(
     chat_id: str,
     answer: str,
     agent_client: AgentClient,
+    *,
+    trace_id: str | None = None,
 ) -> None:
     """If answer mentions request_id=..., fetch pending from agent-core and send card.
 
@@ -199,12 +204,14 @@ async def _maybe_send_confirm_card(
             可能含 request_id 的 Agent 回复。
         agent_client: HTTP client for internal pending lookup.
             用于内部 pending 查询的 HTTP 客户端。
+        trace_id: Trace id reused from the originating message for correlation.
+            来自原始消息的 trace id，用于关联同一次会话的所有调用。
     """
     m = _REQUEST_ID_RE.search(answer)
     if m is None:
         return
     request_id = m.group(1)
-    pc = await agent_client.get_pending(request_id)
+    pc = await agent_client.get_pending(request_id, trace_id=trace_id)
     if pc is None:
         logger.info("request_id=%s not found in agent-core (consumed/expired)", request_id)
         return

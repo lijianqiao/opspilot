@@ -40,6 +40,7 @@ from opspilot.entrypoints.body_limits import (
 )
 from opspilot.entrypoints.feishu_callback import handle_card_action
 from opspilot.llm.client import CircuitBreakerState, LLMClient
+from opspilot.observability.context import bind_trace_id, reset_trace_id
 from opspilot.observability.metrics import record_agent_request, render_metrics
 
 AgentFn = Callable[[str], Awaitable[str]]
@@ -137,6 +138,20 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
         if limit is not None and content_length_exceeds(request, limit):
             return too_large_response()
         return await call_next(request)
+
+    @app.middleware("http")
+    async def trace_context(request: Request, call_next):  # type: ignore[no-untyped-def]
+        """Bind incoming X-OpsPilot-Trace-ID (or mint one) to the ContextVar and echo it back.
+        将入站 X-OpsPilot-Trace-ID 绑定到 ContextVar（缺省则新生成），并在响应中回显。
+        """
+        incoming = request.headers.get("x-opspilot-trace-id")
+        trace_id, token = bind_trace_id(incoming)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_trace_id(token)
+        response.headers["x-opspilot-trace-id"] = trace_id
+        return response
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

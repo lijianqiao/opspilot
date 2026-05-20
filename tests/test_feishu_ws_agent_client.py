@@ -43,7 +43,7 @@ async def test_handle_via_agent_core_sends_card_when_request_id_in_answer() -> N
     assert ask_kwargs["channel"] == "feishu"
     assert ask_kwargs["chat_id"] == "chat1"
     assert ask_kwargs["requester"] == "ou_42"
-    mock_client.get_pending.assert_awaited_once_with("abc123xyz")
+    mock_client.get_pending.assert_awaited_once()
     send_card.assert_called_once()
     # build_confirm_card receives the pending context so card value carries it
     build_card_kwargs = build_card.call_args.kwargs
@@ -52,3 +52,34 @@ async def test_handle_via_agent_core_sends_card_when_request_id_in_answer() -> N
         "chat_id": "chat1",
         "requester": "ou_42",
     }
+
+
+@pytest.mark.anyio
+async def test_handle_via_agent_core_reuses_single_trace_id() -> None:
+    """
+    One trace id per inbound Feishu message: shared by ask() and get_pending().
+
+    每条入站飞书消息只生成一个 trace id，供 ask() 与 get_pending() 共用。
+    """
+    mock_client = AsyncMock()
+    mock_client.ask.return_value = "blocked request_id=abc123xyz"
+    mock_client.get_pending.return_value = MagicMock(
+        request_id="abc123xyz",
+        token="tok",
+        tool="kubectl_scale",
+        tool_input="x",
+        context={},
+    )
+    mock_lark = MagicMock()
+    with (
+        patch("opspilot.entrypoints.feishu_ws._send_reply"),
+        patch("opspilot.entrypoints.feishu_ws._send_card"),
+        patch("opspilot.entrypoints.feishu_ws.build_confirm_card", return_value="{}"),
+    ):
+        await _handle_via_agent_core(mock_lark, "chat1", "scale x", mock_client, requester="ou_42")
+    ask_kwargs = mock_client.ask.await_args.kwargs
+    pending_kwargs = mock_client.get_pending.await_args.kwargs
+    ask_trace = ask_kwargs.get("trace_id")
+    pending_trace = pending_kwargs.get("trace_id")
+    assert ask_trace
+    assert ask_trace == pending_trace

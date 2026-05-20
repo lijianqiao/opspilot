@@ -130,15 +130,18 @@ class AgentClient:
             payload["requester"] = requester
         if trace_id:
             payload["trace_id"] = trace_id
+        headers = self._auth_header()
+        if trace_id:
+            headers["x-opspilot-trace-id"] = trace_id
         r = await self._client.post(
             "/ask",
-            headers=self._auth_header(),
+            headers=headers,
             json=payload,
         )
         r.raise_for_status()
         return r.json()["answer"]
 
-    async def get_pending(self, request_id: str) -> PendingConfirmation | None:
+    async def get_pending(self, request_id: str, *, trace_id: str | None = None) -> PendingConfirmation | None:
         """GET /internal/channels/pending/{request_id}; None if 404.
 
         查询待确认记录；404 时返回 None。
@@ -146,14 +149,19 @@ class AgentClient:
         Args:
             request_id: Pending confirmation id from agent output.
                 Agent 输出中的 request_id。
+            trace_id: Optional trace id to propagate via X-OpsPilot-Trace-ID.
+                可选 trace id，将通过 X-OpsPilot-Trace-ID 头透传。
 
         Returns:
             PendingConfirmation or None if missing/expired.
                 待确认记录，或不存在/已过期时为 None。
         """
+        headers = self._channel_internal_auth_header()
+        if trace_id:
+            headers["x-opspilot-trace-id"] = trace_id
         r = await self._client.get(
             f"/internal/channels/pending/{request_id}",
-            headers=self._channel_internal_auth_header(),
+            headers=headers,
         )
         if r.status_code == 404:
             return None
@@ -167,7 +175,7 @@ class AgentClient:
             context=dict(view.context),
         )
 
-    async def feishu_card_action(self, payload: dict) -> str:
+    async def feishu_card_action(self, payload: dict, *, trace_id: str | None = None) -> str:
         """POST /channels/feishu/card-action and return toast message.
 
         调用飞书卡片回调接口并返回 toast 文案。
@@ -175,14 +183,19 @@ class AgentClient:
         Args:
             payload: Feishu card action dict (action + operator).
                 飞书卡片 action 字典。
+            trace_id: Optional trace id to propagate via X-OpsPilot-Trace-ID.
+                可选 trace id，将通过 X-OpsPilot-Trace-ID 头透传。
 
         Returns:
             Short message for the operator.
                 给操作者的简短反馈。
         """
+        headers = self._auth_header()
+        if trace_id:
+            headers["x-opspilot-trace-id"] = trace_id
         r = await self._client.post(
             "/channels/feishu/card-action",
-            headers=self._auth_header(),
+            headers=headers,
             json=payload,
         )
         r.raise_for_status()

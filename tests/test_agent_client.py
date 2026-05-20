@@ -88,6 +88,57 @@ async def test_ask_omits_unset_context_fields() -> None:
 
 @pytest.mark.anyio
 @respx.mock
+async def test_ask_get_pending_card_action_share_trace_id_header() -> None:
+    """
+    ask/get_pending/feishu_card_action all forward x-opspilot-trace-id when given trace_id.
+
+    AgentClient 的 ask/get_pending/feishu_card_action 在传入 trace_id 时
+    都应通过 x-opspilot-trace-id 请求头透传同一个 trace id。
+    """
+    ask_route = respx.post("http://agent-core:8000/ask").mock(return_value=httpx.Response(200, json={"answer": "ok"}))
+    pending_route = respx.get("http://agent-core:8000/internal/channels/pending/rid1").mock(
+        return_value=httpx.Response(
+            200,
+            json={"request_id": "rid1", "tool": "t", "tool_input": "x", "token": "tk"},
+        )
+    )
+    card_route = respx.post("http://agent-core:8000/channels/feishu/card-action").mock(
+        return_value=httpx.Response(200, json={"message": "done"})
+    )
+    settings = Settings(
+        agent_core_url="http://agent-core:8000",
+        api_auth_token="tok",
+        channel_internal_token="chan",
+    )
+    client = AgentClient(settings)
+    trace_id = "trace-feishu-a"
+    await client.ask("hello", trace_id=trace_id)
+    await client.get_pending("rid1", trace_id=trace_id)
+    await client.feishu_card_action({"action": {}, "operator": {}}, trace_id=trace_id)
+    assert ask_route.calls[0].request.headers["x-opspilot-trace-id"] == trace_id
+    assert pending_route.calls[0].request.headers["x-opspilot-trace-id"] == trace_id
+    assert card_route.calls[0].request.headers["x-opspilot-trace-id"] == trace_id
+    await client.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_ask_omits_trace_header_when_not_provided() -> None:
+    """
+    Without trace_id, AgentClient.ask must not send x-opspilot-trace-id.
+
+    未提供 trace_id 时，AgentClient.ask 不应携带 x-opspilot-trace-id 头。
+    """
+    route = respx.post("http://agent-core:8000/ask").mock(return_value=httpx.Response(200, json={"answer": "ok"}))
+    settings = Settings(agent_core_url="http://agent-core:8000", api_auth_token="tok")
+    client = AgentClient(settings)
+    await client.ask("hello")
+    assert "x-opspilot-trace-id" not in route.calls[0].request.headers
+    await client.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
 async def test_get_pending() -> None:
     """
     AgentClient fetches internal pending confirmation including token.

@@ -220,6 +220,31 @@ def test_alert_normalizes_zabbix_payload(client: TestClient, hmac_secret: str, m
     assert event.alerts[0].severity == "high"
 
 
+def test_alert_response_echoes_trace_id(client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify /alert echoes incoming X-OpsPilot-Trace-ID in the response.
+
+    验证：/alert 在响应头中回显入站 X-OpsPilot-Trace-ID。
+    """
+
+    async def fake_handle(payload, llm):  # type: ignore[no-untyped-def]
+        return "ok"
+
+    monkeypatch.setattr("opspilot.entrypoints.alert_webhook.handle_alert", fake_handle)
+    body = b'{"alerts":[]}'
+    response = client.post(
+        "/alert",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Opspilot-Signature": _sign(body, hmac_secret),
+            "X-OpsPilot-Trace-ID": "trace-z",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("x-opspilot-trace-id") == "trace-z"
+
+
 def test_alert_handles_error_with_redaction(
     client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

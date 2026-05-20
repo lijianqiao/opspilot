@@ -16,6 +16,8 @@ import threading
 from datetime import UTC, datetime
 from typing import Any
 
+from opspilot.observability.context import get_trace_id
+
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -91,6 +93,7 @@ def record_operation(
     """
     record = {
         "ts": datetime.now(UTC).isoformat(),
+        "trace_id": get_trace_id(),
         "tool": tool,
         "tool_input": _safe_field(tool_input),
         "actor": actor,
