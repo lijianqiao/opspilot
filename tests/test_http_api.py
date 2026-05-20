@@ -159,7 +159,13 @@ async def test_ask_plan_mode(monkeypatch: pytest.MonkeyPatch, auth_token: str) -
     """
     called: dict[str, bool] = {"plan": False}
 
-    async def mock_run_agent(question: str, *, plan: bool = False, confirmed_request_id: str | None = None) -> str:
+    async def mock_run_agent(
+        question: str,
+        *,
+        plan: bool = False,
+        confirmed_request_id: str | None = None,
+        confirmation_context: dict[str, str] | None = None,
+    ) -> str:
         called["plan"] = plan
         return "planned"
 
@@ -186,10 +192,17 @@ async def test_ask_passes_confirmed_request_id_in_production_path(
 
     验证：ask passes confirmed request id in production path。
     """
-    called: dict[str, str | None] = {"confirmed_request_id": None}
+    called: dict[str, object] = {"confirmed_request_id": None}
 
-    async def mock_run_agent(question: str, *, plan: bool = False, confirmed_request_id: str | None = None) -> str:
+    async def mock_run_agent(
+        question: str,
+        *,
+        plan: bool = False,
+        confirmed_request_id: str | None = None,
+        confirmation_context: dict[str, str] | None = None,
+    ) -> str:
         called["confirmed_request_id"] = confirmed_request_id
+        called["confirmation_context"] = confirmation_context
         return f"ok: {question}"
 
     monkeypatch.setattr("opspilot.entrypoints.http_api._run_agent", mock_run_agent)
@@ -204,6 +217,83 @@ async def test_ask_passes_confirmed_request_id_in_production_path(
     assert resp.status_code == 200
     assert resp.json()["answer"] == "ok: approve"
     assert called["confirmed_request_id"] == "req-123"
+
+
+@pytest.mark.anyio
+async def test_ask_builds_confirmation_context_from_body(monkeypatch: pytest.MonkeyPatch, auth_token: str) -> None:
+    """
+    Verify /ask builds confirmation_context from channel/chat_id/requester body.
+
+    验证：/ask 根据请求体中的 channel/chat_id/requester 构造 confirmation_context。
+    """
+    captured: dict[str, object] = {}
+
+    async def mock_run_agent(
+        question: str,
+        *,
+        plan: bool = False,
+        confirmed_request_id: str | None = None,
+        confirmation_context: dict[str, str] | None = None,
+    ) -> str:
+        captured["confirmation_context"] = confirmation_context
+        return "ok"
+
+    monkeypatch.setattr("opspilot.entrypoints.http_api._run_agent", mock_run_agent)
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/ask",
+            json={
+                "question": "restart payment",
+                "channel": "feishu",
+                "chat_id": "chat-a",
+                "requester": "ou_1",
+            },
+            headers=_bearer(auth_token),
+        )
+    assert resp.status_code == 200
+    assert captured["confirmation_context"] == {
+        "channel": "feishu",
+        "chat_id": "chat-a",
+        "requester": "ou_1",
+    }
+
+
+@pytest.mark.anyio
+async def test_ask_confirmation_context_is_none_when_no_channel_info(
+    monkeypatch: pytest.MonkeyPatch, auth_token: str
+) -> None:
+    """
+    Verify /ask passes None when no channel/chat/requester is supplied.
+
+    验证：未携带渠道字段时 /ask 透传 confirmation_context=None，保持向后兼容。
+    """
+    captured: dict[str, object] = {"set": False}
+
+    async def mock_run_agent(
+        question: str,
+        *,
+        plan: bool = False,
+        confirmed_request_id: str | None = None,
+        confirmation_context: dict[str, str] | None = None,
+    ) -> str:
+        captured["set"] = True
+        captured["confirmation_context"] = confirmation_context
+        return "ok"
+
+    monkeypatch.setattr("opspilot.entrypoints.http_api._run_agent", mock_run_agent)
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/ask",
+            json={"question": "list pods"},
+            headers=_bearer(auth_token),
+        )
+    assert resp.status_code == 200
+    assert captured["set"] is True
+    assert captured["confirmation_context"] is None
 
 
 @pytest.mark.anyio

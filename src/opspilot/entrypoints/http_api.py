@@ -46,7 +46,13 @@ AgentFn = Callable[[str], Awaitable[str]]
 _LLM_BREAKER = CircuitBreakerState()
 
 
-async def _run_agent(question: str, *, plan: bool = False, confirmed_request_id: str | None = None) -> str:
+async def _run_agent(
+    question: str,
+    *,
+    plan: bool = False,
+    confirmed_request_id: str | None = None,
+    confirmation_context: dict[str, str] | None = None,
+) -> str:
     """Run Supervisor or Plan-Execute against agent-core LLM client.
 
     使用 agent-core 内 LLM 客户端运行 Supervisor 或 Plan-Execute。
@@ -58,6 +64,10 @@ async def _run_agent(question: str, *, plan: bool = False, confirmed_request_id:
             为 True 时使用 Plan-Execute，否则 Supervisor。
         confirmed_request_id: Optional id to resume after HITL approval.
             可选，人工确认后继续执行时传入的 request_id。
+        confirmation_context: Optional channel-bound context (channel/chat_id/
+            requester) forwarded to the agent graphs and guarded_call_tool.
+            可选渠道绑定上下文（channel/chat_id/requester），逐级透传给 Agent 图与
+            guarded_call_tool。
 
     Returns:
         Agent answer text.
@@ -67,8 +77,18 @@ async def _run_agent(question: str, *, plan: bool = False, confirmed_request_id:
     llm = LLMClient(settings, breaker=_LLM_BREAKER)
     try:
         if plan:
-            return await run_plan_execute(question, llm, confirmed_request_id=confirmed_request_id)
-        return await run_supervisor(question, llm, confirmed_request_id=confirmed_request_id)
+            return await run_plan_execute(
+                question,
+                llm,
+                confirmed_request_id=confirmed_request_id,
+                confirmation_context=confirmation_context,
+            )
+        return await run_supervisor(
+            question,
+            llm,
+            confirmed_request_id=confirmed_request_id,
+            confirmation_context=confirmation_context,
+        )
     finally:
         await llm.aclose()
 
@@ -157,14 +177,26 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
         question = body.question.strip()
         if not question:
             raise HTTPException(status_code=422, detail="question is required")
+        confirmation_context = {
+            k: v
+            for k, v in {
+                "channel": body.channel or "",
+                "chat_id": body.chat_id or "",
+                "requester": body.requester or "",
+            }.items()
+            if v
+        }
         try:
             if use_injected_agent:
                 assert agent_fn is not None
                 answer = await agent_fn(question)
-            elif body.confirmed_request_id is None:
-                answer = await _run_agent(question, plan=body.plan)
             else:
-                answer = await _run_agent(question, plan=body.plan, confirmed_request_id=body.confirmed_request_id)
+                answer = await _run_agent(
+                    question,
+                    plan=body.plan,
+                    confirmed_request_id=body.confirmed_request_id,
+                    confirmation_context=confirmation_context or None,
+                )
         except Exception:
             record_agent_request(endpoint="/ask", status="error")
             raise
@@ -222,6 +254,7 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             request_id=pc.request_id,
             tool=pc.tool,
             tool_input=pc.tool_input,
+            context=dict(pc.context),
         )
 
     @app.get(
@@ -249,6 +282,7 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             tool=pc.tool,
             tool_input=pc.tool_input,
             token=pc.token,
+            context=dict(pc.context),
         )
 
     @app.post(
@@ -268,7 +302,9 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             CardActionResponse with message.
                 含消息的 CardActionResponse。
         """
-        payload = {"action": body.action, "operator": body.operator or {}}
+        payload: dict[str, object] = {"action": body.action, "operator": body.operator or {}}
+        if body.chat_id:
+            payload["chat_id"] = body.chat_id
         msg = handle_card_action(payload, store=STORE)
         return CardActionResponse(message=msg)
 

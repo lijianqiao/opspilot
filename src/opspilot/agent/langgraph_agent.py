@@ -59,6 +59,7 @@ class AgentState(TypedDict):
     messages: Annotated[list[dict[str, str]], _append_messages]
     question: str
     confirmed_request_id: str | None
+    confirmation_context: dict[str, str] | None
     steps_taken: int
     max_steps: int
     tool_calls: int
@@ -127,6 +128,7 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
         max_calls=get_settings().agent_max_tool_calls,
         confirmed_request_id=state.get("confirmed_request_id"),
         allowed_tools=allowed_tools,
+        confirmation_context=state.get("confirmation_context"),
     )
     return {
         "messages": [{"role": "user", "content": f"Observation: {result.observation}"}],
@@ -193,6 +195,7 @@ async def run_react_graph(
     max_steps: int = 5,
     tool_filter: set[str] | None = None,
     confirmed_request_id: str | None = None,
+    confirmation_context: dict[str, str] | None = None,
 ) -> str:
     """Run the ReAct loop via LangGraph StateGraph.
     通过 LangGraph StateGraph 运行 ReAct 循环。
@@ -208,6 +211,11 @@ async def run_react_graph(
             最大 LLM 轮次数。
         tool_filter: Optional tool name subset for the system prompt.
             系统提示中可选的工具名子集。
+        confirmed_request_id: Optional id resuming after HITL approval.
+            可选，HITL 批准后用于继续执行的 request_id。
+        confirmation_context: Optional channel-bound context propagated to
+            guarded_call_tool for HITL binding.
+            可选渠道绑定上下文，透传给 guarded_call_tool 完成 HITL 绑定。
 
     Returns:
         Final Answer text or step/limit message.
@@ -224,6 +232,7 @@ async def run_react_graph(
         ],
         "question": question,
         "confirmed_request_id": confirmed_request_id,
+        "confirmation_context": confirmation_context,
         "steps_taken": 0,
         "max_steps": max_steps,
         "tool_calls": 0,
@@ -284,6 +293,7 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
             ],
             "question": question,
             "confirmed_request_id": None,
+            "confirmation_context": None,
             "steps_taken": 0,
             "max_steps": max_steps,
             "tool_calls": 0,

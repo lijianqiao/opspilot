@@ -50,6 +50,7 @@ def guarded_call_tool(
     audit_path: str | None = None,
     actor: str = "agent",
     allowed_tools: set[str] | None = None,
+    confirmation_context: dict[str, str] | None = None,
 ) -> GuardedResult:
     """All-in-one safety gate: cap, danger check, HITL, audit, execute, redact.
     一体化安全门：调用上限、危险判定、人工确认、审计、执行、脱敏。
@@ -74,6 +75,13 @@ def guarded_call_tool(
         allowed_tools: Optional hard allowlist of tool names; calls outside it
             are rejected at this chokepoint regardless of prompt content.
             可选的工具名硬白名单；不在其中的调用在此入口被拒绝，不依赖提示词过滤。
+        confirmation_context: Optional channel-bound context
+            (channel/chat_id/requester) recorded on new pending confirmations
+            and checked when consuming an existing approval. Prevents approvals
+            from one chat being replayed against a tool call originating
+            elsewhere.
+            可选渠道绑定上下文（channel/chat_id/requester）：登记新待确认时写入、
+            消费既有审批时校验，防止跨会话越权放行。
 
     Returns:
         GuardedResult with observation and blocked flag.
@@ -97,7 +105,12 @@ def guarded_call_tool(
     if is_dangerous(tool_name, raw_input):
         # 已有人工确认 → 放行执行
         if confirmed_request_id is not None and (
-            confirmer := store.consume_if_matches(confirmed_request_id, tool_name, raw_input)
+            confirmer := store.consume_if_matches(
+                confirmed_request_id,
+                tool_name,
+                raw_input,
+                context=confirmation_context,
+            )
         ):
             rollback = rollback_info_for(tool_name, raw_input)
             observation = redact(call_tool(tool_name, raw_input))
@@ -115,7 +128,7 @@ def guarded_call_tool(
 
         # 无确认 → 登记 pending，拦截
         record_guardrail_block(tool_name)
-        pc = store.request(tool_name, raw_input)
+        pc = store.request(tool_name, raw_input, context=confirmation_context)
         record_operation(
             tool=tool_name,
             tool_input=raw_input,

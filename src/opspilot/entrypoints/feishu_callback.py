@@ -46,14 +46,37 @@ def handle_card_action(payload: dict[str, Any], store: ConfirmationStore | None 
     open_id = operator.get("open_id") or operator.get("user_id") or "unknown"
     actor = f"feishu:{open_id}"
 
+    # Rebuild the current context from the Feishu event payload — the
+    # authoritative trust boundary is the operator open_id and event chat_id.
+    # The context embedded in the card `value` is NOT trusted as a security
+    # signal: an attacker who forwards the card would still carry the
+    # original value but click from a different chat / open_id.
+    value_context_raw = value.get("context")
+    value_context: dict[str, str] = value_context_raw if isinstance(value_context_raw, dict) else {}
+    event_chat_id = payload.get("chat_id") or payload.get("open_chat_id")
+    current_context: dict[str, str] = {"channel": "feishu"}
+    if open_id and open_id != "unknown":
+        current_context["requester"] = str(open_id)
+    if event_chat_id:
+        current_context["chat_id"] = str(event_chat_id)
+    elif "chat_id" in value_context:
+        # Compatibility fallback only: some lark-oapi callback model versions
+        # do not surface chat_id on card-action events. requester (open_id)
+        # remains the authoritative binding in that case.
+        current_context["chat_id"] = str(value_context["chat_id"])
+
     if value.get("action") == "confirm":
         token: str = value.get("token", "")
-        ok = store.confirm(request_id, token, actor=actor)
+        ok = store.confirm(request_id, token, actor=actor, context=current_context)
         if ok:
             logger.info("card confirm OK: request_id=%s actor=%s", request_id, actor)
             return f"已确认（{actor}），操作将继续执行。"
-        logger.warning("card confirm FAILED: request_id=%s actor=%s (expired/invalid)", request_id, actor)
-        return "确认失败：请求已过期或无效。"
+        logger.warning(
+            "card confirm FAILED: request_id=%s actor=%s (expired/invalid/context mismatch)",
+            request_id,
+            actor,
+        )
+        return "确认失败：请求已过期、无效或上下文不匹配。"
 
     # cancel / unknown action
     logger.info("card cancel: request_id=%s actor=%s", request_id, actor)

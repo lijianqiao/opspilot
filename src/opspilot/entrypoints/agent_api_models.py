@@ -24,11 +24,23 @@ class AskRequest(BaseModel):
             为 True 时使用 Plan-Execute。
         confirmed_request_id: Resume after HITL confirm when set.
             设置时在人工确认后继续执行。
+        channel: Source channel label (e.g. "feishu") for HITL context binding.
+            来源渠道标签（如 "feishu"），用于 HITL 上下文绑定。
+        chat_id: Channel chat id where the question originated.
+            问题发起的渠道会话 ID。
+        requester: Identity of the human asker (e.g. Feishu open_id).
+            提问人身份标识（如飞书 open_id）。
+        trace_id: Optional caller-supplied trace id for cross-service correlation.
+            可选，调用方提供的 trace id，用于跨服务关联。
     """
 
     question: str = Field(min_length=1, max_length=MAX_AGENT_QUESTION_CHARS)
     plan: bool = False
     confirmed_request_id: str | None = Field(default=None, max_length=128)
+    channel: str | None = Field(default=None, max_length=64)
+    chat_id: str | None = Field(default=None, max_length=128)
+    requester: str | None = Field(default=None, max_length=128)
+    trace_id: str | None = Field(default=None, max_length=128)
 
 
 class AskResponse(BaseModel):
@@ -52,11 +64,16 @@ class PendingConfirmationView(BaseModel):
             被拦截的工具名。
         tool_input: Raw tool input snapshot.
             工具输入快照。
+        context: Channel-bound context recorded when the pending was created
+            (channel/chat_id/requester). Empty when legacy/unbound.
+            登记 pending 时记录的渠道绑定上下文（channel/chat_id/requester），
+            未绑定/旧记录时为空。
     """
 
     request_id: str
     tool: str
     tool_input: str
+    context: dict[str, str] = Field(default_factory=dict)
 
 
 class PendingConfirmationInternalView(PendingConfirmationView):
@@ -76,6 +93,7 @@ class CardActionRequest(BaseModel):
 
     action: dict = Field(default_factory=dict)
     operator: dict | None = None
+    chat_id: str | None = Field(default=None, max_length=128)
 
 
 class CardActionResponse(BaseModel):

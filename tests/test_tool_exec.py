@@ -162,6 +162,94 @@ def test_generic_restart_service_requires_confirmation(tmp_path) -> None:
     assert result.request_id
 
 
+def test_confirmation_context_recorded_on_block(tmp_path) -> None:
+    """
+    Verify guarded_call_tool stores the channel-bound context on new pending.
+
+    验证：guarded_call_tool 在登记 pending 时记录渠道绑定上下文。
+    """
+    store = ConfirmationStore(300)
+    result = guarded_call_tool(
+        "restart_service",
+        '{"service":"user-service"}',
+        calls=1,
+        max_calls=8,
+        store=store,
+        confirmation_context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    assert result.blocked is True
+    assert result.request_id is not None
+    pending = store.get_pending(result.request_id)
+    assert pending is not None
+    assert pending.context == {"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"}
+
+
+def test_confirmation_context_mismatch_blocks_execution(tmp_path) -> None:
+    """
+    Verify a confirmed pending cannot be consumed from a different context.
+
+    验证：已确认的 pending 在不同渠道/会话上下文中不可被消费。
+    """
+    store = ConfirmationStore(300)
+    raw = '{"deployment":"user-service","replicas":0}'
+    pc = store.request(
+        "kubectl_scale",
+        raw,
+        context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+    )
+    assert (
+        store.confirm(
+            pc.request_id,
+            pc.token,
+            actor="feishu:ou_1",
+            context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+        )
+        is True
+    )
+
+    result = guarded_call_tool(
+        "kubectl_scale",
+        raw,
+        calls=1,
+        max_calls=8,
+        store=store,
+        confirmed_request_id=pc.request_id,
+        confirmation_context={"channel": "feishu", "chat_id": "chat-b", "requester": "ou_1"},
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    # 上下文不匹配 → 视为未确认 → 重新登记 pending
+    assert result.blocked is True
+    # confirmation should still be intact on the original pending
+    assert store.is_confirmed(pc.request_id) is True
+
+
+def test_confirmation_context_match_executes(tmp_path) -> None:
+    """
+    Verify a confirmed pending with matching context executes successfully.
+
+    验证：上下文匹配的已确认 pending 能够成功执行。
+    """
+    store = ConfirmationStore(300)
+    raw = '{"deployment":"user-service","replicas":0}'
+    ctx = {"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"}
+    pc = store.request("kubectl_scale", raw, context=ctx)
+    assert store.confirm(pc.request_id, pc.token, actor="feishu:ou_1", context=ctx) is True
+
+    result = guarded_call_tool(
+        "kubectl_scale",
+        raw,
+        calls=1,
+        max_calls=8,
+        store=store,
+        confirmed_request_id=pc.request_id,
+        confirmation_context=ctx,
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    assert result.blocked is False
+    assert "scaled" in result.observation
+
+
 def test_observation_redacted(tmp_path) -> None:
     """
     Verify observation redacted.

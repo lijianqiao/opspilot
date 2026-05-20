@@ -113,6 +113,83 @@ def test_expired_request_rejected() -> None:
     assert store.is_confirmed(pc.request_id) is False
 
 
+def test_consume_if_matches_requires_same_channel_context() -> None:
+    """
+    Verify HITL approvals are bound to the channel/chat/requester context.
+
+    验证：HITL 审批必须绑定渠道/会话/请求人上下文，跨会话重放应被拒绝。
+    """
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request(
+        "restart_service",
+        '{"service":"user-service"}',
+        context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+    )
+    # 同一 token + 不同 chat 应被拒：攻击者把卡片转发到其他群也无法通过
+    assert (
+        store.confirm(
+            pc.request_id,
+            pc.token,
+            actor="feishu:ou_1",
+            context={"channel": "feishu", "chat_id": "chat-b", "requester": "ou_1"},
+        )
+        is False
+    )
+    # 同一 context 才能确认
+    assert (
+        store.confirm(
+            pc.request_id,
+            pc.token,
+            actor="feishu:ou_1",
+            context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+        )
+        is True
+    )
+    # consume_if_matches 同样需要 context 匹配
+    assert (
+        store.consume_if_matches(
+            pc.request_id,
+            "restart_service",
+            '{"service":"user-service"}',
+            context={"channel": "feishu", "chat_id": "chat-b", "requester": "ou_1"},
+        )
+        is None
+    )
+    # 正确 context 下应成功消费
+    assert (
+        store.consume_if_matches(
+            pc.request_id,
+            "restart_service",
+            '{"service":"user-service"}',
+            context={"channel": "feishu", "chat_id": "chat-a", "requester": "ou_1"},
+        )
+        == "feishu:ou_1"
+    )
+
+
+def test_legacy_pending_with_empty_context_matches_any_context() -> None:
+    """
+    Backwards compat: pending without context (legacy / API caller without
+    channel info) must still be confirmable with any or no context.
+
+    向后兼容：登记时未带 context 的旧 pending，确认/消费时传任意 context 都应通过。
+    """
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request("kubectl_scale", "x")
+    assert store.confirm(pc.request_id, pc.token, actor="cli:tester") is True
+    # 即使提供 context 也不应被拒（pending 上下文为空）
+    pc2 = store.request("kubectl_scale", "y")
+    assert (
+        store.confirm(
+            pc2.request_id,
+            pc2.token,
+            actor="cli:tester",
+            context={"channel": "feishu", "chat_id": "c", "requester": "ou_x"},
+        )
+        is True
+    )
+
+
 def test_get_pending_returns_record_without_consuming() -> None:
     # 飞书 entrypoint 收到 guarded_call_tool 返回的 request_id 后，需要
     # 取出 token + tool + input 构造确认卡片；只读，不消费、不放行。

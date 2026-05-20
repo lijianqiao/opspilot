@@ -7,7 +7,7 @@
     渠道适配器经 HTTP 调用 agent-core 的客户端。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -26,6 +26,7 @@ class PendingConfirmation:
     tool: str
     tool_input: str
     token: str
+    context: dict[str, str] = field(default_factory=dict)
 
 
 class AgentClient:
@@ -88,7 +89,16 @@ class AgentClient:
             raise RuntimeError("OPSPILOT_CHANNEL_INTERNAL_TOKEN 未配置，无法查询待确认操作")
         return {"Authorization": f"Bearer {token}"}
 
-    async def ask(self, question: str, *, plan: bool = False) -> str:
+    async def ask(
+        self,
+        question: str,
+        *,
+        plan: bool = False,
+        channel: str | None = None,
+        chat_id: str | None = None,
+        requester: str | None = None,
+        trace_id: str | None = None,
+    ) -> str:
         """POST /ask and return the answer text.
 
         调用 POST /ask 并返回回答文本。
@@ -98,15 +108,32 @@ class AgentClient:
                 用户问题。
             plan: Use Plan-Execute when True.
                 为 True 时使用 Plan-Execute。
+            channel: Source channel label (e.g. "feishu") for HITL binding.
+                来源渠道标签（如 "feishu"），用于 HITL 绑定。
+            chat_id: Originating chat id for HITL binding.
+                发起会话 ID，用于 HITL 绑定。
+            requester: Identity of the asker (e.g. Feishu open_id).
+                提问人身份标识（如飞书 open_id）。
+            trace_id: Optional caller-supplied trace id.
+                可选调用方提供的 trace id。
 
         Returns:
             Agent answer string.
                 Agent 回答。
         """
+        payload: dict[str, object] = {"question": question, "plan": plan}
+        if channel:
+            payload["channel"] = channel
+        if chat_id:
+            payload["chat_id"] = chat_id
+        if requester:
+            payload["requester"] = requester
+        if trace_id:
+            payload["trace_id"] = trace_id
         r = await self._client.post(
             "/ask",
             headers=self._auth_header(),
-            json={"question": question, "plan": plan},
+            json=payload,
         )
         r.raise_for_status()
         return r.json()["answer"]
@@ -137,6 +164,7 @@ class AgentClient:
             tool=view.tool,
             tool_input=view.tool_input,
             token=view.token,
+            context=dict(view.context),
         )
 
     async def feishu_card_action(self, payload: dict) -> str:

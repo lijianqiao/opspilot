@@ -55,6 +55,7 @@ class SupervisorState(TypedDict):
 
     question: str
     confirmed_request_id: str | None
+    confirmation_context: dict[str, str] | None
     intent: str
     final_answer: str
 
@@ -114,6 +115,7 @@ async def log_analyzer_node(state: SupervisorState) -> dict[str, Any]:
         _llm(),
         tool_filter=_LOG_ANALYZER_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
+        confirmation_context=state.get("confirmation_context"),
     )
     return {"final_answer": answer}
 
@@ -137,6 +139,7 @@ async def ops_operator_node(state: SupervisorState) -> dict[str, Any]:
         _llm(),
         tool_filter=_OPS_OPERATOR_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
+        confirmation_context=state.get("confirmation_context"),
     )
     return {"final_answer": answer}
 
@@ -158,6 +161,7 @@ async def generic_react_node(state: SupervisorState) -> dict[str, Any]:
         _llm(),
         tool_filter=_GENERIC_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
+        confirmation_context=state.get("confirmation_context"),
     )
     return {"final_answer": answer}
 
@@ -197,7 +201,12 @@ def _build_supervisor_graph() -> Any:
 _compiled_supervisor = _build_supervisor_graph()
 
 
-async def run_supervisor(question: str, llm: SupportsChat, confirmed_request_id: str | None = None) -> str:
+async def run_supervisor(
+    question: str,
+    llm: SupportsChat,
+    confirmed_request_id: str | None = None,
+    confirmation_context: dict[str, str] | None = None,
+) -> str:
     """Run supervisor: classify intent then dispatch to a sub-agent.
     运行监督者：分类意图后分派到对应子智能体。
 
@@ -208,6 +217,11 @@ async def run_supervisor(question: str, llm: SupportsChat, confirmed_request_id:
             用户问题或任务。
         llm: Chat backend implementing SupportsChat.
             实现 SupportsChat 的对话后端。
+        confirmed_request_id: Optional id resuming after HITL approval.
+            可选，HITL 批准后用于继续执行的 request_id。
+        confirmation_context: Optional channel-bound context forwarded to
+            sub-agents and ultimately guarded_call_tool.
+            可选渠道绑定上下文，逐级透传到子智能体与 guarded_call_tool。
 
     Returns:
         Sub-agent final answer text.
@@ -217,6 +231,7 @@ async def run_supervisor(question: str, llm: SupportsChat, confirmed_request_id:
     init: dict[str, Any] = {
         "question": question,
         "confirmed_request_id": confirmed_request_id,
+        "confirmation_context": confirmation_context,
         "intent": "",
         "final_answer": "",
     }

@@ -12,7 +12,48 @@ from __future__ import annotations
 import secrets
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+ConfirmationContext = dict[str, str]
+
+
+def _normalize_context(context: ConfirmationContext | None) -> ConfirmationContext:
+    """Filter out empty values from a confirmation context dict.
+    过滤掉确认上下文中的空值字段。
+
+    Args:
+        context: Optional raw context dict.
+            可选原始上下文字典。
+
+    Returns:
+        New dict containing only non-empty entries.
+            仅包含非空条目的新字典。
+    """
+    return {k: v for k, v in (context or {}).items() if v}
+
+
+def _context_matches(expected: ConfirmationContext, current: ConfirmationContext | None) -> bool:
+    """Return True when expected context is fully matched by current context.
+    返回 expected 是否被 current 完全匹配。
+
+    Legacy pending confirmations with empty expected context match anything;
+    this preserves backwards compatibility for API callers without channel info.
+    expected 为空时视为兼容旧记录，匹配任意 current。
+
+    Args:
+        expected: Context stored on the pending confirmation.
+            待确认记录上保存的上下文。
+        current: Context supplied by the caller attempting to confirm/consume.
+            尝试确认/消费时调用方提供的上下文。
+
+    Returns:
+        True if every key in expected appears in current with the same value.
+            当 expected 中每个键值都与 current 一致时返回 True。
+    """
+    if not expected:
+        return True
+    actual = _normalize_context(current)
+    return all(actual.get(key) == value for key, value in expected.items())
 
 
 @dataclass(frozen=True)
@@ -31,6 +72,10 @@ class PendingConfirmation:
             确认所需密钥（LLM 不可预测）。
         expires_at: Monotonic clock expiry timestamp.
             基于 monotonic 时钟的过期时间戳。
+        context: Channel-bound context (channel/chat_id/requester) that any
+            confirm/consume must match; empty dict means legacy/unbound.
+            渠道绑定上下文（channel/chat_id/requester），任何确认/消费需匹配；
+            为空字典表示旧记录或未绑定。
     """
 
     request_id: str
@@ -38,6 +83,7 @@ class PendingConfirmation:
     tool_input: str
     token: str
     expires_at: float
+    context: ConfirmationContext = field(default_factory=dict)
 
 
 class ConfirmationStore:
@@ -51,7 +97,12 @@ class ConfirmationStore:
         self._pending: dict[str, PendingConfirmation] = {}
         self._confirmed_by: dict[str, str] = {}
 
-    def request(self, tool: str, tool_input: str) -> PendingConfirmation:
+    def request(
+        self,
+        tool: str,
+        tool_input: str,
+        context: ConfirmationContext | None = None,
+    ) -> PendingConfirmation:
         """Register a new pending confirmation for a blocked dangerous call.
         为被拦截的危险调用登记新的待确认记录。
 
@@ -60,6 +111,11 @@ class ConfirmationStore:
                 工具名称。
             tool_input: Raw tool input.
                 工具输入原文。
+            context: Optional channel-bound context (channel/chat_id/requester)
+                that any later confirm/consume must match. Empty values are
+                dropped; an all-empty context leaves the request legacy/unbound.
+                可选渠道绑定上下文（channel/chat_id/requester），后续确认/消费需匹配；
+                空值会被丢弃；全为空时记录为旧式未绑定状态。
 
         Returns:
             PendingConfirmation with request_id and token.
@@ -71,13 +127,20 @@ class ConfirmationStore:
             tool_input=tool_input,
             token=secrets.token_urlsafe(24),
             expires_at=time.monotonic() + self._ttl,
+            context=_normalize_context(context),
         )
         with self._lock:
             self._gc_locked()
             self._pending[pc.request_id] = pc
         return pc
 
-    def confirm(self, request_id: str, token: str, actor: str) -> bool:
+    def confirm(
+        self,
+        request_id: str,
+        token: str,
+        actor: str,
+        context: ConfirmationContext | None = None,
+    ) -> bool:
         """Approve a pending request with token; records confirming actor.
         使用 token 批准待确认请求并记录确认人。
 
@@ -88,10 +151,16 @@ class ConfirmationStore:
                 审批通道提供的密钥。
             actor: Human operator identifier.
                 人工操作者标识。
+            context: Optional context describing where the approval click
+                actually happened. Must match the context recorded on the
+                pending request (empty pending context matches anything).
+                可选上下文，描述本次审批实际发生的位置；必须与待确认记录的上下文匹配
+                （pending 上下文为空时表示旧记录，匹配任意 current）。
 
         Returns:
-            True if confirmation succeeded; False if invalid or expired.
-                确认成功为 True；无效或过期为 False。
+            True if confirmation succeeded; False if invalid, expired,
+            or context mismatch.
+                确认成功为 True；无效、过期或上下文不匹配时为 False。
         """
         with self._lock:
             pc = self._pending.get(request_id)
@@ -99,6 +168,8 @@ class ConfirmationStore:
                 self._pending.pop(request_id, None)
                 return False
             if not secrets.compare_digest(token, pc.token):
+                return False
+            if not _context_matches(pc.context, context):
                 return False
             self._confirmed_by[request_id] = actor
             return True
@@ -157,7 +228,13 @@ class ConfirmationStore:
             self._pending.pop(request_id, None)
             return actor
 
-    def consume_if_matches(self, request_id: str, tool: str, tool_input: str) -> str | None:
+    def consume_if_matches(
+        self,
+        request_id: str,
+        tool: str,
+        tool_input: str,
+        context: ConfirmationContext | None = None,
+    ) -> str | None:
         """Consume a confirmed request only when it matches the original call.
         消费已确认请求，仅当与原始调用匹配时。
 
@@ -168,10 +245,14 @@ class ConfirmationStore:
                 工具名称。
             tool_input: Raw tool input.
                 工具输入原文。
+            context: Optional context of the current call site; must match the
+                context recorded on the pending request.
+                可选当前调用方上下文；必须与待确认记录上下文匹配。
 
         Returns:
-            Confirming actor string, or None if not confirmed or mismatched.
-                确认人标识，未确认或不匹配时为 None。
+            Confirming actor string, or None if not confirmed, mismatched,
+            or context bound to a different channel.
+                确认人标识，未确认/不匹配/上下文不一致时返回 None。
         """
         with self._lock:
             pc = self._pending.get(request_id)
@@ -182,6 +263,8 @@ class ConfirmationStore:
                 self._confirmed_by.pop(request_id, None)
                 return None
             if pc.tool != tool or pc.tool_input != tool_input:
+                return None
+            if not _context_matches(pc.context, context):
                 return None
             actor = self._confirmed_by.pop(request_id, None)
             if actor is None:

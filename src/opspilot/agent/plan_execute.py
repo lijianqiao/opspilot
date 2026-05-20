@@ -57,6 +57,7 @@ class PlanState(TypedDict):
 
     question: str
     confirmed_request_id: str | None
+    confirmation_context: dict[str, str] | None
     plan: list[str]
     cursor: int
     results: Annotated[list[dict[str, str]], _append]
@@ -148,6 +149,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
             max_calls=get_settings().agent_max_tool_calls,
             confirmed_request_id=state.get("confirmed_request_id"),
             allowed_tools=_pe_tool_filter.get(),
+            confirmation_context=state.get("confirmation_context"),
         )
         result = guarded.observation
     elif parsed.final is not None:
@@ -238,6 +240,7 @@ async def run_plan_execute(
     max_steps: int = 20,
     tool_filter: set[str] | None = None,
     confirmed_request_id: str | None = None,
+    confirmation_context: dict[str, str] | None = None,
 ) -> str:
     """Run the Plan-Execute loop; API-shaped like run_react_graph().
     运行 Plan-Execute 循环；API 形态与 run_react_graph() 一致。
@@ -251,6 +254,11 @@ async def run_plan_execute(
             执行器/再规划的最大迭代次数。
         tool_filter: Optional subset of tool names for the executor prompt.
             执行器提示中可选的工具名子集。
+        confirmed_request_id: Optional id resuming after HITL approval.
+            可选，HITL 批准后用于继续执行的 request_id。
+        confirmation_context: Optional channel-bound context propagated to
+            guarded_call_tool for HITL binding.
+            可选渠道绑定上下文，透传给 guarded_call_tool 完成 HITL 绑定。
 
     Returns:
         Final synthesized answer or last step result / limit message.
@@ -261,6 +269,7 @@ async def run_plan_execute(
     init: dict[str, Any] = {
         "question": question,
         "confirmed_request_id": confirmed_request_id,
+        "confirmation_context": confirmation_context,
         "plan": [],
         "cursor": 0,
         "results": [],

@@ -14,7 +14,13 @@ import json
 from opspilot.agent.confirmation import STORE, ConfirmationStore
 
 
-def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: str) -> str:
+def build_confirm_card(
+    request_id: str,
+    token: str,
+    tool_name: str,
+    tool_input: str,
+    context: dict[str, str] | None = None,
+) -> str:
     """Build a Feishu interactive card asking for human confirmation.
 
     构建请求人工确认的飞书交互卡片 JSON。
@@ -32,11 +38,18 @@ def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: 
             被拦截的工具名称。
         tool_input: Serialized tool input for display.
             用于展示的工具入参。
+        context: Channel-bound context recorded on the pending confirmation;
+            embedded in the card value for display/compatibility only. The
+            authoritative binding on confirmation is rebuilt from the Feishu
+            event payload (see feishu_callback.handle_card_action).
+            待确认记录上的渠道绑定上下文；卡片 value 仅做展示/兼容回退用途，
+            真正的绑定凭据由飞书事件载荷重建（见 feishu_callback.handle_card_action）。
 
     Returns:
         JSON string of the interactive card payload.
             交互卡片载荷的 JSON 字符串。
     """
+    embedded_context = dict(context or {})
     return json.dumps(
         {
             "header": {
@@ -55,13 +68,26 @@ def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: 
                             "tag": "button",
                             "text": {"tag": "plain_text", "content": "确认执行"},
                             "type": "primary",
-                            "value": json.dumps({"action": "confirm", "request_id": request_id, "token": token}),
+                            "value": json.dumps(
+                                {
+                                    "action": "confirm",
+                                    "request_id": request_id,
+                                    "token": token,
+                                    "context": embedded_context,
+                                }
+                            ),
                         },
                         {
                             "tag": "button",
                             "text": {"tag": "plain_text", "content": "取消"},
                             "type": "danger",
-                            "value": json.dumps({"action": "cancel", "request_id": request_id}),
+                            "value": json.dumps(
+                                {
+                                    "action": "cancel",
+                                    "request_id": request_id,
+                                    "context": embedded_context,
+                                }
+                            ),
                         },
                     ],
                 },

@@ -146,6 +146,7 @@ async def _handle_via_agent_core(
     chat_id: str,
     question: str,
     agent_client: AgentClient,
+    requester: str | None = None,
 ) -> None:
     """Handle one Feishu message via agent-core HTTP API.
 
@@ -160,11 +161,19 @@ async def _handle_via_agent_core(
             用户原始消息文本。
         agent_client: HTTP client to agent-core.
             调用 agent-core 的 HTTP 客户端。
+        requester: Optional Feishu open_id of the sender for HITL binding.
+            可选，发送者的飞书 open_id，用于 HITL 绑定。
     """
     stripped, use_plan = _select_agent(question)
 
     async def _ask(text: str) -> str:
-        return await agent_client.ask(text, plan=use_plan)
+        return await agent_client.ask(
+            text,
+            plan=use_plan,
+            channel="feishu",
+            chat_id=chat_id,
+            requester=requester,
+        )
 
     answer = await handle_question(stripped, _ask)
     _send_reply(lark_client, chat_id, answer)
@@ -199,7 +208,7 @@ async def _maybe_send_confirm_card(
     if pc is None:
         logger.info("request_id=%s not found in agent-core (consumed/expired)", request_id)
         return
-    card = build_confirm_card(pc.request_id, pc.token, pc.tool, pc.tool_input)
+    card = build_confirm_card(pc.request_id, pc.token, pc.tool, pc.tool_input, context=pc.context)
     try:
         _send_card(lark_client, chat_id, card)
         logger.info("sent confirm card for request_id=%s tool=%s", request_id, pc.tool)
@@ -308,9 +317,11 @@ def run() -> None:  # manual verification only, not unit tested
     lark_client = _get_lark_client(settings.feishu_app_id, settings.feishu_app_secret)
     agent_client = AgentClient(settings)
 
-    def _handle_in_background(chat_id: str, question: str) -> None:
+    def _handle_in_background(chat_id: str, question: str, requester: str | None) -> None:
         try:
-            _run_blocking(lambda: _handle_via_agent_core(lark_client, chat_id, question, agent_client))
+            _run_blocking(
+                lambda: _handle_via_agent_core(lark_client, chat_id, question, agent_client, requester=requester)
+            )
         except Exception:
             logger.exception("Failed to handle message for chat %s", chat_id)
 
@@ -319,10 +330,16 @@ def run() -> None:  # manual verification only, not unit tested
         if data is None:
             return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "无效回调"}})
         op = data.operator
-        payload = {
+        # chat_id may or may not be exposed on card-action events depending on
+        # lark-oapi version; pass it through when available so the callback can
+        # bind to the real (event-supplied) chat context, not the card value.
+        event_chat_id = getattr(data, "open_chat_id", None) or getattr(data, "chat_id", None)
+        payload: dict[str, object] = {
             "action": {"value": (data.action.value if data.action else {}) or {}},
             "operator": {"open_id": (op.open_id if op else None) or (op.user_id if op else None) or "unknown"},
         }
+        if event_chat_id:
+            payload["chat_id"] = str(event_chat_id)
         try:
             msg = str(_run_blocking(lambda: agent_client.feishu_card_action(payload)))
         except Exception:
@@ -337,7 +354,9 @@ def run() -> None:  # manual verification only, not unit tested
         question = _extract_text(event)
         if not question:
             return
-        _EXECUTOR.submit(_handle_in_background, data.message.chat_id, question)
+        sender = data.sender
+        requester = (sender.sender_id.open_id if sender and sender.sender_id else None) or None
+        _EXECUTOR.submit(_handle_in_background, data.message.chat_id, question, requester)
 
     handler = (
         lark.EventDispatcherHandler.builder(

@@ -37,6 +37,57 @@ async def test_ask_posts_with_bearer() -> None:
 
 @pytest.mark.anyio
 @respx.mock
+async def test_ask_propagates_channel_context() -> None:
+    """
+    AgentClient.ask sends channel/chat_id/requester/trace_id in payload.
+
+    AgentClient.ask 应在请求体中透传 channel/chat_id/requester/trace_id。
+    """
+    import json as _json
+
+    route = respx.post("http://agent-core:8000/ask").mock(return_value=httpx.Response(200, json={"answer": "ok"}))
+    settings = Settings(agent_core_url="http://agent-core:8000", api_auth_token="tok")
+    client = AgentClient(settings)
+    answer = await client.ask(
+        "restart payment",
+        plan=True,
+        channel="feishu",
+        chat_id="chat-a",
+        requester="ou_1",
+        trace_id="trace-xyz",
+    )
+    assert answer == "ok"
+    body = _json.loads(route.calls[0].request.content.decode("utf-8"))
+    assert body["question"] == "restart payment"
+    assert body["plan"] is True
+    assert body["channel"] == "feishu"
+    assert body["chat_id"] == "chat-a"
+    assert body["requester"] == "ou_1"
+    assert body["trace_id"] == "trace-xyz"
+    await client.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_ask_omits_unset_context_fields() -> None:
+    """
+    AgentClient.ask should not include channel/chat_id/etc when not set.
+
+    AgentClient.ask 未提供渠道字段时不应写入请求体，保持向后兼容。
+    """
+    import json as _json
+
+    route = respx.post("http://agent-core:8000/ask").mock(return_value=httpx.Response(200, json={"answer": "ok"}))
+    settings = Settings(agent_core_url="http://agent-core:8000", api_auth_token="tok")
+    client = AgentClient(settings)
+    await client.ask("ping")
+    body = _json.loads(route.calls[0].request.content.decode("utf-8"))
+    assert set(body.keys()) == {"question", "plan"}
+    await client.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
 async def test_get_pending() -> None:
     """
     AgentClient fetches internal pending confirmation including token.
