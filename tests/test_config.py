@@ -47,6 +47,11 @@ def test_get_settings_is_cached() -> None:
     assert get_settings() is get_settings()  # 同一实例，未重复读 .env
 
 
+def test_agent_core_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPSPILOT_AGENT_CORE_URL", raising=False)
+    assert Settings().agent_core_url == "http://localhost:8000"
+
+
 def test_settings_repr_masks_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPSPILOT_LLM_API_KEY", "sk-supersecret999")
     monkeypatch.setenv("OPSPILOT_PG_DSN", "postgresql://u:pw123@h/db")

@@ -94,6 +94,28 @@ async def test_ask_requires_bearer(auth_token: str) -> None:
 
 
 @pytest.mark.anyio
+async def test_ask_plan_mode(monkeypatch: pytest.MonkeyPatch, auth_token: str) -> None:
+    called: dict[str, bool] = {"plan": False}
+
+    async def mock_run_agent(question: str, *, plan: bool = False) -> str:
+        called["plan"] = plan
+        return "planned"
+
+    monkeypatch.setattr("opspilot.entrypoints.http_api._run_agent", mock_run_agent)
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/ask",
+            json={"question": "重启服务", "plan": True},
+            headers=_bearer(auth_token),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["answer"] == "planned"
+    assert called["plan"] is True
+
+
+@pytest.mark.anyio
 async def test_ask_fail_closed_when_token_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     from opspilot.config import get_settings
 

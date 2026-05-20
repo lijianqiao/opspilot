@@ -3,8 +3,8 @@
 @Email: lijianqiao2906@live.com
 @FileName: feishu_ws.py
 @DateTime: 2026-05-20
-@Docs: Feishu WS bot — messages, agent replies, and confirm cards.
-    飞书 WS 长连接机器人：消息处理、Agent 回复与确认卡片。
+@Docs: Feishu WS bot — thin adapter calling agent-core via AgentClient.
+    飞书 WS 薄适配器：经 AgentClient 调用 agent-core，不进程内跑 Agent。
 """
 
 from __future__ import annotations
@@ -29,32 +29,25 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
     P2CardActionTriggerResponse,
 )
 
-from opspilot.agent.confirmation import STORE
 from opspilot.agent.guardrails import redact
-from opspilot.agent.plan_execute import run_plan_execute
-from opspilot.agent.supervisor import run_supervisor
 from opspilot.config import get_settings
-from opspilot.entrypoints.feishu_callback import handle_card_action
+from opspilot.entrypoints.agent_client import AgentClient
 from opspilot.entrypoints.feishu_card import build_confirm_card
-from opspilot.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 AgentFn = Callable[[str], Awaitable[str]]
 
-
 _FEISHU_MENTION_RE = re.compile(r"^@\S+\s*")
-# guarded_call_tool 拦截消息形如 "...request_id=AbCdEf12..."
 _REQUEST_ID_RE = re.compile(r"request_id=([A-Za-z0-9_\-]+)")
 
-# 有界线程池：限制并发消息处理 worker，避免 thread-per-message 耗尽
 _EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="opspilot-feishu")
 
 
 def _select_agent(text: str) -> tuple[str, bool]:
     """Return (stripped_text, use_plan_execute).
 
-    Strips Feishu mention prefix (e.g. ``@_user_1 ``) before matching.
+    返回 (去前缀后的文本, 是否使用 Plan-Execute)。
     """
     cleaned = _FEISHU_MENTION_RE.sub("", text)
     for prefix in ("规划：", "规划:", "/plan "):
@@ -67,19 +60,6 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     """Handle a Feishu message: strip, validate, delegate to agent.
 
     处理飞书消息：去空白、校验后委托 agent 回答。
-
-    On failure returns redacted text; full exception logged only server-side.
-    异常路径返回固定脱敏文案，详情仅写服务端日志。
-
-    Args:
-        text: Incoming message text.
-            入站消息文本。
-        agent: Async callable(question) -> answer.
-            异步 agent(question) -> answer。
-
-    Returns:
-        Agent answer or user-safe error message.
-            Agent 回答或对用户安全的错误提示。
     """
     text = text.strip()
     if not text:
@@ -91,28 +71,74 @@ async def handle_question(text: str, agent: AgentFn) -> str:
         return redact("处理出错，请稍后重试或联系运维。")
 
 
-def _run_blocking(text: str, agent: AgentFn) -> str:
-    """Run handle_question in a fresh event loop on a new thread.
+def _run_blocking(coro_factory: Callable[[], Awaitable[object]]) -> object:
+    """Run an async coroutine factory in a fresh thread event loop.
 
-    lark-oapi WS callbacks run on a thread that already has an event
-    loop, so anyio.run() raises RuntimeError. This helper spawns a
-    clean thread with no running loop.
+    在无运行中事件循环的新线程中执行异步协程工厂。
     """
-    box: dict[str, str] = {}
+    box: dict[str, object] = {}
     error: dict[str, Exception] = {}
 
     def _worker() -> None:
         try:
-            box["answer"] = anyio.run(handle_question, text, agent)
+            box["result"] = anyio.run(coro_factory)
         except Exception as exc:
             error["exc"] = exc
 
-    thread = threading.Thread(target=_worker, name="opspilot-feishu-agent")
+    thread = threading.Thread(target=_worker, name="opspilot-feishu-async")
     thread.start()
     thread.join()
     if "exc" in error:
         raise error["exc"]
-    return box["answer"]
+    return box["result"]
+
+
+def _run_blocking_question(text: str, agent: AgentFn) -> str:
+    """Run handle_question in a fresh event loop on a new thread."""
+    return str(_run_blocking(lambda: handle_question(text, agent)))
+
+
+async def _handle_via_agent_core(
+    lark_client: lark.Client,
+    chat_id: str,
+    question: str,
+    agent_client: AgentClient,
+) -> None:
+    """Handle one Feishu message via agent-core HTTP API.
+
+    经 agent-core HTTP 处理一条飞书消息：回复文本并在需要时发确认卡片。
+    """
+    stripped, use_plan = _select_agent(question)
+
+    async def _ask(text: str) -> str:
+        return await agent_client.ask(text, plan=use_plan)
+
+    answer = await handle_question(stripped, _ask)
+    _send_reply(lark_client, chat_id, answer)
+    await _maybe_send_confirm_card(lark_client, chat_id, answer, agent_client)
+
+
+async def _maybe_send_confirm_card(
+    lark_client: lark.Client,
+    chat_id: str,
+    answer: str,
+    agent_client: AgentClient,
+) -> None:
+    """If answer mentions request_id=..., fetch pending from agent-core and send card."""
+    m = _REQUEST_ID_RE.search(answer)
+    if m is None:
+        return
+    request_id = m.group(1)
+    pc = await agent_client.get_pending(request_id)
+    if pc is None:
+        logger.info("request_id=%s not found in agent-core (consumed/expired)", request_id)
+        return
+    card = build_confirm_card(pc.request_id, pc.token, pc.tool, pc.tool_input)
+    try:
+        _send_card(lark_client, chat_id, card)
+        logger.info("sent confirm card for request_id=%s tool=%s", request_id, pc.tool)
+    except Exception:
+        logger.exception("failed to send confirm card for request_id=%s", request_id)
 
 
 def _extract_text(event: P2ImMessageReceiveV1) -> str:
@@ -159,70 +185,37 @@ def _send_card(client: lark.Client, chat_id: str, card_json: str) -> None:
     )
 
 
-def _maybe_send_confirm_card(client: lark.Client, chat_id: str, answer: str) -> None:
-    """If agent output mentions request_id=..., look up STORE and send a confirm card."""
-    m = _REQUEST_ID_RE.search(answer)
-    if m is None:
-        return
-    request_id = m.group(1)
-    pc = STORE.get_pending(request_id)
-    if pc is None:
-        logger.info("request_id=%s not found in STORE (already consumed/expired)", request_id)
-        return
-    card = build_confirm_card(pc.request_id, pc.token, pc.tool, pc.tool_input)
-    try:
-        _send_card(client, chat_id, card)
-        logger.info("sent confirm card for request_id=%s tool=%s", request_id, pc.tool)
-    except Exception:
-        logger.exception("failed to send confirm card for request_id=%s", request_id)
-
-
-def _on_card_action(trigger: P2CardActionTrigger) -> P2CardActionTriggerResponse:
-    """lark-oapi card-action callback adapter — delegates to pure handle_card_action."""
-    data = trigger.event
-    if data is None:
-        return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "无效回调"}})
-    op = data.operator
-    payload = {
-        "action": {"value": (data.action.value if data.action else {}) or {}},
-        "operator": {"open_id": (op.open_id if op else None) or (op.user_id if op else None) or "unknown"},
-    }
-    msg = handle_card_action(payload)
-    return P2CardActionTriggerResponse({"toast": {"type": "success", "content": msg}})
-
-
 def run() -> None:  # manual verification only, not unit tested
-    """Start Feishu WS long-connection bot.
+    """Start Feishu WS long-connection bot (thin adapter to agent-core).
 
-    启动飞书 WS 长连接机器人。
-
-    Requires OPSPILOT_FEISHU_APP_ID and OPSPILOT_FEISHU_APP_SECRET.
-    需要配置 OPSPILOT_FEISHU_APP_ID 与 OPSPILOT_FEISHU_APP_SECRET。
+    启动飞书 WS 长连接机器人（薄适配器，Agent 运行在 agent-core）。
     """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     settings = get_settings()
-    client = _get_lark_client(settings.feishu_app_id, settings.feishu_app_secret)
-
-    async def _agent(text: str) -> str:
-        llm = LLMClient(settings)
-        try:
-            stripped, use_plan = _select_agent(text)
-            if use_plan:
-                logger.info("Agent mode: Plan-Execute (direct) | question: %s", stripped)
-                return await run_plan_execute(stripped, llm)
-            logger.info("Agent mode: Supervisor | question: %s", stripped)
-            return await run_supervisor(stripped, llm)
-        finally:
-            await llm.aclose()
+    lark_client = _get_lark_client(settings.feishu_app_id, settings.feishu_app_secret)
+    agent_client = AgentClient(settings)
 
     def _handle_in_background(chat_id: str, question: str) -> None:
-        """Run agent, send reply, and (if guarded) follow up with confirm card."""
         try:
-            answer = _run_blocking(question, _agent)
-            _send_reply(client, chat_id, answer)
-            _maybe_send_confirm_card(client, chat_id, answer)
+            _run_blocking(lambda: _handle_via_agent_core(lark_client, chat_id, question, agent_client))
         except Exception:
             logger.exception("Failed to handle message for chat %s", chat_id)
+
+    def _on_card_action(trigger: P2CardActionTrigger) -> P2CardActionTriggerResponse:
+        data = trigger.event
+        if data is None:
+            return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "无效回调"}})
+        op = data.operator
+        payload = {
+            "action": {"value": (data.action.value if data.action else {}) or {}},
+            "operator": {"open_id": (op.open_id if op else None) or (op.user_id if op else None) or "unknown"},
+        }
+        try:
+            msg = str(_run_blocking(lambda: agent_client.feishu_card_action(payload)))
+        except Exception:
+            logger.exception("feishu card-action via agent-core failed")
+            return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "处理失败，请稍后重试"}})
+        return P2CardActionTriggerResponse({"toast": {"type": "success", "content": msg}})
 
     def _on_message(event: P2ImMessageReceiveV1) -> None:
         data = event.event
@@ -231,7 +224,6 @@ def run() -> None:  # manual verification only, not unit tested
         question = _extract_text(event)
         if not question:
             return
-        # 有界执行：限制并发，避免不可控的 thread-per-message。
         _EXECUTOR.submit(_handle_in_background, data.message.chat_id, question)
 
     handler = (

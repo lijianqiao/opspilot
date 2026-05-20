@@ -11,7 +11,7 @@ import anyio
 import pytest
 
 from opspilot.entrypoints.feishu_ws import (
-    _run_blocking,
+    _run_blocking_question,
     _select_agent,
     handle_question,
 )
@@ -74,7 +74,7 @@ async def test_run_blocking_works_inside_running_loop() -> None:
     async def agent(text: str) -> str:
         return f"answered: {text}"
 
-    assert _run_blocking("  pod 状态  ", agent) == "answered: pod 状态"
+    assert _run_blocking_question("  pod 状态  ", agent) == "answered: pod 状态"
 
 
 @pytest.mark.anyio
@@ -84,7 +84,7 @@ async def test_run_blocking_returns_redacted_message_on_agent_error() -> None:
 
     # handle_question catches the error and returns a redacted generic message
     # (审查报告：之前是 f"Error: {exc}"，会泄露 secret-shaped 错误内容)
-    result = _run_blocking("hi", boom)
+    result = _run_blocking_question("hi", boom)
     assert "agent failed" not in result
     assert "sk-XYZ" not in result
     assert "出错" in result

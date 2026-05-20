@@ -28,6 +28,7 @@ dependencies = [
 [project.scripts]
 opspilot = "opspilot.entrypoints.cli:main"
 opspilot-gateway = "opspilot.entrypoints.llm_gateway:main"
+opspilot-feishu = "opspilot.entrypoints.feishu_ws:run"
 
 [dependency-groups]
 dev = [

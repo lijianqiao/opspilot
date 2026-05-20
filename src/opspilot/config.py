@@ -45,6 +45,8 @@ class Settings(BaseSettings):
             HTTP API Bearer 令牌（空表示未配置，端点 fail-closed）。
         alertmanager_hmac_secret: HMAC secret for Alertmanager webhooks.
             Alertmanager Webhook HMAC 密钥。
+        agent_core_url: Base URL for channel adapters to call agent-core HTTP API.
+            渠道适配器调用 agent-core 的 HTTP 基址。
     """
 
     model_config = SettingsConfigDict(env_prefix="OPSPILOT_", env_file=".env", extra="ignore")
@@ -64,6 +66,7 @@ class Settings(BaseSettings):
     confirm_ttl_seconds: int = 300
     api_auth_token: str = Field(default="", repr=False)  # 为空表示未配置鉴权（端点 fail-closed）
     alertmanager_hmac_secret: str = Field(default="", repr=False)
+    agent_core_url: str = "http://localhost:8000"
 
 
 @lru_cache(maxsize=1)

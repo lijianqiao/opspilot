@@ -1,0 +1,129 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: agent_client.py
+@DateTime: 2026-05-20
+@Docs: HTTP client for channel adapters to call agent-core.
+    渠道适配器经 HTTP 调用 agent-core 的客户端。
+"""
+
+from dataclasses import dataclass
+
+import httpx
+
+from opspilot.config import Settings, get_settings
+from opspilot.entrypoints.agent_api_models import PendingConfirmationView
+
+
+@dataclass(frozen=True)
+class PendingConfirmation:
+    """Pending HITL confirmation returned from agent-core.
+
+    agent-core 返回的待确认危险操作记录。
+    """
+
+    request_id: str
+    tool: str
+    tool_input: str
+    token: str
+
+
+class AgentClient:
+    """Async HTTP client for channel adapters (Feishu, future Slack, etc.).
+
+    渠道适配器（飞书及未来 Slack 等）使用的异步 HTTP 客户端。
+    """
+
+    def __init__(self, settings: Settings | None = None, http_client: httpx.AsyncClient | None = None) -> None:
+        self._settings = settings or get_settings()
+        self._owns_client = http_client is None
+        self._client = http_client or httpx.AsyncClient(
+            base_url=self._settings.agent_core_url.rstrip("/"),
+            timeout=httpx.Timeout(120.0),
+        )
+
+    def _auth_header(self) -> dict[str, str]:
+        token = self._settings.api_auth_token
+        if not token:
+            raise RuntimeError("OPSPILOT_API_AUTH_TOKEN 未配置，无法调用 agent-core")
+        return {"Authorization": f"Bearer {token}"}
+
+    async def ask(self, question: str, *, plan: bool = False) -> str:
+        """POST /ask and return the answer text.
+
+        调用 POST /ask 并返回回答文本。
+
+        Args:
+            question: User question.
+                用户问题。
+            plan: Use Plan-Execute when True.
+                为 True 时使用 Plan-Execute。
+
+        Returns:
+            Agent answer string.
+                Agent 回答。
+        """
+        r = await self._client.post(
+            "/ask",
+            headers=self._auth_header(),
+            json={"question": question, "plan": plan},
+        )
+        r.raise_for_status()
+        return r.json()["answer"]
+
+    async def get_pending(self, request_id: str) -> PendingConfirmation | None:
+        """GET /channels/pending/{request_id}; None if 404.
+
+        查询待确认记录；404 时返回 None。
+
+        Args:
+            request_id: Pending confirmation id from agent output.
+                Agent 输出中的 request_id。
+
+        Returns:
+            PendingConfirmation or None if missing/expired.
+                待确认记录，或不存在/已过期时为 None。
+        """
+        r = await self._client.get(
+            f"/channels/pending/{request_id}",
+            headers=self._auth_header(),
+        )
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        view = PendingConfirmationView.model_validate(r.json())
+        return PendingConfirmation(
+            request_id=view.request_id,
+            tool=view.tool,
+            tool_input=view.tool_input,
+            token=view.token,
+        )
+
+    async def feishu_card_action(self, payload: dict) -> str:
+        """POST /channels/feishu/card-action and return toast message.
+
+        调用飞书卡片回调接口并返回 toast 文案。
+
+        Args:
+            payload: Feishu card action dict (action + operator).
+                飞书卡片 action 字典。
+
+        Returns:
+            Short message for the operator.
+                给操作者的简短反馈。
+        """
+        r = await self._client.post(
+            "/channels/feishu/card-action",
+            headers=self._auth_header(),
+            json=payload,
+        )
+        r.raise_for_status()
+        return r.json()["message"]
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client if owned by this instance.
+
+        关闭本实例拥有的底层 HTTP 客户端。
+        """
+        if self._owns_client:
+            await self._client.aclose()

@@ -32,7 +32,7 @@ services:
       dockerfile: Dockerfile
     container_name: opspilot-agent-core
     env_file:
-      - .env
+      - ../.env
     environment:
       OPSPILOT_LLM_BASE_URL: ${OPSPILOT_LLM_BASE_URL:-http://host.docker.internal:8080/v1}
       OPSPILOT_LLM_MODEL: ${OPSPILOT_LLM_MODEL:-qwen3.5-9b}
@@ -45,6 +45,20 @@ services:
       - postgres
       - qdrant
       - redis
+
+  feishu-bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: opspilot-feishu-bot
+    command: ["uv", "run", "opspilot-feishu"]
+    env_file:
+      - ../.env
+    environment:
+      OPSPILOT_AGENT_CORE_URL: http://agent-core:8000
+    depends_on:
+      - agent-core
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v2.55.0
