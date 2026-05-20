@@ -1,4 +1,14 @@
-"""One-command eval score table:  uv run python scripts/run_eval.py"""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: run_eval.py
+@DateTime: 2026-05-20
+@Docs: CLI: run offline eval harness and print score table.
+    CLI：运行离线 eval 并打印评分表。
+
+Usage:
+    uv run python scripts/run_eval.py
+"""
 
 import argparse
 import json

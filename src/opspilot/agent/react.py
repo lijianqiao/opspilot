@@ -1,11 +1,10 @@
-"""Hand-written ReAct loop — Stage 0 reference implementation, enhanced for Stage 1.
-
-⚠️ 学习参照实现：无 guardrails（无 is_dangerous / redact / 人工确认门 / 审计）。
-禁止接入任何 entrypoint。生产路径请用 langgraph_agent / plan_execute（经 guarded_call_tool）。
-
-This module is the learning artifact: the same ReAct logic as the LangGraph
-version (langgraph_agent.py) but implemented without any framework. Kept
-as a reference for the stage summary comparison.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: react.py
+@DateTime: 2026-05-20
+@Docs: Hand-written ReAct loop — Stage 0 reference, no guardrails.
+    手写 ReAct 循环：Stage 0 参照实现，无安全护栏。
 """
 
 from __future__ import annotations
@@ -24,12 +23,22 @@ async def run_react(
     llm: SupportsChat,
     max_steps: int = 5,
 ) -> str:
-    """Run a ReAct loop: Reason → Act → Observe → repeat.
+    """Run a ReAct loop: Reason, Act, Observe, repeat until Final Answer.
+    运行 ReAct 循环：推理、行动、观测，直至得到 Final Answer。
 
-    Enhanced from Stage 0:
-    - System prompt auto-generated from tool registry
-    - Action Input parsed as JSON when possible (multi-arg support)
-    - Tool execution errors caught and fed back as observations via call_tool()
+    Learning reference only — no guardrails. Production uses langgraph_agent.
+
+    Args:
+        question: User question or task description.
+            用户问题或任务描述。
+        llm: Chat backend implementing SupportsChat.
+            实现 SupportsChat 的对话后端。
+        max_steps: Maximum reasoning steps before giving up.
+            放弃前的最大推理步数。
+
+    Returns:
+        Final Answer text, last assistant reply, or step-limit message.
+            Final Answer 文本、最后一条助手回复或步数上限提示。
     """
     system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
 

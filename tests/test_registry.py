@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_registry.py
+@DateTime: 2026-05-20
+@Docs: Tests tool registry registration and call_tool parsing.
+    测试工具注册表与 call_tool 参数解析。
+"""
+
 from __future__ import annotations
 
 from collections.abc import Generator

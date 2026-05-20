@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_gateway_providers.py
+@DateTime: 2026-05-20
+@Docs: Tests ProviderRouter primary/fallback selection.
+    测试 ProviderRouter 主备切换。
+"""
+
 from opspilot.gateway.config import GatewayProvider
 from opspilot.gateway.providers import ProviderRouter
 

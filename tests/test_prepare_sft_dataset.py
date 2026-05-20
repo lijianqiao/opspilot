@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_prepare_sft_dataset.py
+@DateTime: 2026-05-20
+@Docs: Tests SFT dataset preparation script helpers.
+    测试 SFT 数据集准备脚本辅助逻辑。
+"""
+
 import json
 from pathlib import Path
 

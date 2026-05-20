@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_tool_node_guardrails.py
+@DateTime: 2026-05-20
+@Docs: Tests LangGraph tool_node cap, danger block, redact.
+    测试 LangGraph tool_node 上限/拦截/脱敏。
+"""
+
 import pytest
 
 from opspilot.agent.langgraph_agent import run_react_graph

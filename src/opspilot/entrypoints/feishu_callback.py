@@ -1,9 +1,10 @@
-"""Feishu interactive-card action callback — pure handler.
-
-lark-oapi WS 的 card-action 事件 (`p2.card.action.trigger`) 在 feishu_ws.run()
-里用 EventDispatcherHandler.builder().register_p2_card_action_trigger(...) 注册；
-那一层只做薄适配 (P2CardActionTrigger → dict)，真正逻辑在本文件的纯函数，
-便于单测且与 lark-oapi 版本解耦。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: feishu_callback.py
+@DateTime: 2026-05-20
+@Docs: Pure handler for Feishu interactive card action callbacks.
+    飞书交互卡片按钮回调的纯函数处理器（与 lark-oapi 解耦）。
 """
 
 from __future__ import annotations
@@ -17,13 +18,25 @@ logger = logging.getLogger(__name__)
 
 
 def handle_card_action(payload: dict[str, Any], store: ConfirmationStore | None = None) -> str:
-    """处理飞书卡片按钮 action 回调。
+    """Handle Feishu card button action callback.
 
-    payload 形如 lark P2CardActionTriggerData 的 dict：
+    处理飞书卡片按钮 action 回调。
+
+    Payload shape (lark P2CardActionTriggerData dict):
       {"action": {"value": {"action": "confirm"|"cancel", "request_id":..., "token":...}},
        "operator": {"open_id": "ou_xxx"}}
 
-    返回值是给操作者显示的简短反馈文案（toast）。
+    payload 形如 lark P2CardActionTriggerData 的 dict（见上）。
+
+    Args:
+        payload: Card action event dict from Feishu.
+            飞书卡片 action 事件字典。
+        store: Optional ConfirmationStore; defaults to global STORE.
+            可选确认存储；默认使用全局 STORE。
+
+    Returns:
+        Short toast message for the operator.
+            给操作者显示的简短反馈文案（toast）。
     """
     store = store if store is not None else STORE
     action_obj = payload.get("action") or {}

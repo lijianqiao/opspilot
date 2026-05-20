@@ -1,13 +1,10 @@
-"""Supervisor agent: classify intent and route to specialized sub-agents.
-
-Architecture:
-  START -> classify -> log_analyzer / k8s_operator / generic_react -> END
-
-Each sub-agent node calls its own compiled graph internally, passing
-a filtered tool prompt so each agent only sees its relevant tools.
-
-Handoff: after a sub-agent returns, the Supervisor can dispatch to
-another sub-agent if needed (e.g., Alert Handler calls Log Analyzer).
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: supervisor.py
+@DateTime: 2026-05-20
+@Docs: Supervisor agent: classify intent and route to sub-agents.
+    监督者智能体：意图分类并路由到专用子智能体。
 """
 
 from __future__ import annotations
@@ -41,6 +38,18 @@ _GENERIC_TOOLS = {"get_pod_status", "kubectl_get", "kubectl_describe", "query_lo
 
 
 class SupervisorState(TypedDict):
+    """LangGraph state for the supervisor routing graph.
+    监督者路由图的 LangGraph 状态。
+
+    Attributes:
+        question: Original user message.
+            用户原始消息。
+        intent: Classified intent label (log_analyzer, k8s_operator, generic_react).
+            分类后的意图标签。
+        final_answer: Sub-agent result returned to the caller.
+            子智能体返回给调用方的最终答案。
+    """
+
     question: str
     intent: str
     final_answer: str
@@ -57,7 +66,17 @@ def _llm() -> SupportsChat:
 
 
 async def classify_node(state: SupervisorState) -> dict[str, Any]:
-    """Classify user intent into one of: log_analyzer, k8s_operator, generic_react."""
+    """Classify user intent into log_analyzer, k8s_operator, or generic_react.
+    将用户意图分类为 log_analyzer、k8s_operator 或 generic_react。
+
+    Args:
+        state: Current supervisor state with question.
+            含 question 的当前监督者状态。
+
+    Returns:
+        State update dict with intent field.
+            含 intent 字段的状态更新字典。
+    """
     prompt = (
         "你是 OpsPilot 的意图分类器。分析用户消息，回复 INTENT: <类别>。\n\n"
         "类别定义：\n"
@@ -75,13 +94,33 @@ async def classify_node(state: SupervisorState) -> dict[str, Any]:
 
 
 async def log_analyzer_node(state: SupervisorState) -> dict[str, Any]:
-    """Run the Log Analyzer sub-agent (ReAct with log tools)."""
+    """Run the Log Analyzer sub-agent (ReAct with log-focused tools).
+    运行日志分析子智能体（ReAct，仅日志相关工具）。
+
+    Args:
+        state: Supervisor state with question.
+            含 question 的监督者状态。
+
+    Returns:
+        State update with final_answer from the sub-agent.
+            含子智能体 final_answer 的状态更新。
+    """
     answer = await run_react_graph(state["question"], _llm(), tool_filter=_LOG_ANALYZER_TOOLS)
     return {"final_answer": answer}
 
 
 async def k8s_operator_node(state: SupervisorState) -> dict[str, Any]:
-    """Run the K8s Operator sub-agent (Plan-Execute with K8s tools)."""
+    """Run the K8s Operator sub-agent (Plan-Execute with K8s tools).
+    运行 K8s 操作子智能体（Plan-Execute，K8s 工具集）。
+
+    Args:
+        state: Supervisor state with question.
+            含 question 的监督者状态。
+
+    Returns:
+        State update with final_answer from Plan-Execute.
+            含 Plan-Execute 返回的 final_answer 的状态更新。
+    """
     from opspilot.agent.plan_execute import run_plan_execute
 
     answer = await run_plan_execute(state["question"], _llm(), tool_filter=_K8S_OPERATOR_TOOLS)
@@ -89,7 +128,17 @@ async def k8s_operator_node(state: SupervisorState) -> dict[str, Any]:
 
 
 async def generic_react_node(state: SupervisorState) -> dict[str, Any]:
-    """Fallback: generic ReAct with general tools."""
+    """Fallback generic ReAct sub-agent with general-purpose tools.
+    回退通用 ReAct 子智能体，使用通用运维工具集。
+
+    Args:
+        state: Supervisor state with question.
+            含 question 的监督者状态。
+
+    Returns:
+        State update with final_answer from ReAct.
+            含 ReAct 返回的 final_answer 的状态更新。
+    """
     answer = await run_react_graph(state["question"], _llm(), tool_filter=_GENERIC_TOOLS)
     return {"final_answer": answer}
 
@@ -129,9 +178,20 @@ _compiled_supervisor = _build_supervisor_graph()
 
 
 async def run_supervisor(question: str, llm: SupportsChat) -> str:
-    """Run the Supervisor: classify intent -> dispatch to sub-agent.
+    """Run supervisor: classify intent then dispatch to a sub-agent.
+    运行监督者：分类意图后分派到对应子智能体。
 
-    API-compatible with run_react_graph() — same (question, llm) signature.
+    API-compatible with run_react_graph — same (question, llm) signature.
+
+    Args:
+        question: User question or task.
+            用户问题或任务。
+        llm: Chat backend implementing SupportsChat.
+            实现 SupportsChat 的对话后端。
+
+    Returns:
+        Sub-agent final answer text.
+            子智能体返回的最终答案文本。
     """
     _current_llm.set(llm)
     init: dict[str, Any] = {"question": question, "intent": "", "final_answer": ""}

@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_audit.py
+@DateTime: 2026-05-20
+@Docs: Tests append-only JSONL operation audit log.
+    测试 append-only JSONL 操作审计日志。
+"""
+
 import json
 
 

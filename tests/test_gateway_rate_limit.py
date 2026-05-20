@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_gateway_rate_limit.py
+@DateTime: 2026-05-20
+@Docs: Tests Redis fixed-window rate limiter atomicity.
+    测试 Redis 固定窗口限流原子性。
+"""
+
 import pytest
 
 from opspilot.gateway.rate_limit import RateLimitResult, RedisRateLimiter

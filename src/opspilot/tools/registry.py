@@ -1,4 +1,11 @@
-"""Tool registry: decorator-based registration with auto JSON Schema generation."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: registry.py
+@DateTime: 2026-05-20
+@Docs: Tool registry: decorator registration with auto JSON Schema.
+    工具注册表：装饰器注册并自动生成 JSON Schema。
+"""
 
 from __future__ import annotations
 
@@ -27,7 +34,23 @@ _SCHEMA_TYPE_TO_PYTHON: dict[str, type] = {v: k for k, v in TYPE_MAP.items()}
 
 @dataclass(frozen=True)
 class ToolInfo:
-    """All metadata the agent needs about a registered tool."""
+    """Metadata the agent needs for one registered tool.
+    智能体所需的单个已注册工具元数据。
+
+    Attributes:
+        name: Tool name used in Action lines.
+            Action 行中使用的工具名。
+        description: First line of tool docstring (English for prompts).
+            工具文档字符串首行（英文，用于提示）。
+        func: Callable implementing the tool.
+            实现该工具的可调用对象。
+        parameters: JSON Schema for Action Input.
+            Action Input 的 JSON Schema。
+        risk: Risk level label (e.g. low, high).
+            风险等级标签（如 low、high）。
+        reversible: Whether the op supports rollback metadata.
+            是否支持回滚元数据。
+    """
 
     name: str
     description: str
@@ -82,6 +105,7 @@ def register_tool(
     func: Callable[..., str] | None = None, *, name: str | None = None, risk: str = "low", reversible: bool = False
 ) -> Callable[..., str] | Callable[[Callable[..., str]], Callable[..., str]]:
     """Decorator to register a function as an OpsPilot tool.
+    将函数注册为 OpsPilot 工具的装饰器。
 
     Usage:
         @register_tool
@@ -89,6 +113,20 @@ def register_tool(
 
         @register_tool(name="custom_name")
         def my_tool(x: str) -> str: ...
+
+    Args:
+        func: Function to register when used as @register_tool without parens.
+            无参装饰时待注册的函数。
+        name: Optional override for tool name.
+            可选的工具名覆盖。
+        risk: Risk level stored in ToolInfo.
+            写入 ToolInfo 的风险等级。
+        reversible: Reversible flag for rollback-aware tools.
+            支持回滚的工具的可逆标志。
+
+    Returns:
+        Registered function unchanged, or partial decorator when func is None.
+            原函数不变，或 func 为 None 时返回部分装饰器。
     """
 
     def _register(f: Callable[..., str]) -> Callable[..., str]:
@@ -111,19 +149,27 @@ def register_tool(
 
 
 def get_registered_tools() -> dict[str, ToolInfo]:
-    """Return a copy of the registry so callers can't mutate it."""
+    """Return a copy of the registry so callers cannot mutate it.
+    返回注册表副本，防止调用方修改内部状态。
+
+    Returns:
+        Dict mapping tool name to ToolInfo.
+            工具名到 ToolInfo 的字典。
+    """
     return dict(_registry)
 
 
 def build_tools_prompt(tool_filter: set[str] | None = None) -> str:
     """Auto-generate the tools section of the system prompt from registry.
-
-    Produces a description block for each registered tool so the LLM
-    knows what's available, what arguments to pass, and in what format.
+    根据注册表自动生成系统提示中的工具说明段落。
 
     Args:
-        tool_filter: Optional set of tool names to include. If None or empty,
-                     all registered tools are included.
+        tool_filter: Optional set of tool names to include; None means all.
+            可选工具名集合；为 None 时包含全部已注册工具。
+
+    Returns:
+        Chinese-formatted tools prompt for the LLM.
+            面向 LLM 的中文格式工具提示文本。
     """
     tools = get_registered_tools()
 
@@ -167,11 +213,19 @@ def build_tools_prompt(tool_filter: set[str] | None = None) -> str:
 
 def call_tool(name: str, raw_input: str) -> str:
     """Look up a registered tool and call it, parsing raw_input intelligently.
+    查找已注册工具并调用，智能解析 raw_input。
 
-    Parsing strategy:
-    1. If raw_input is valid JSON object → use as keyword args
-    2. If tool has exactly one required param → pass raw_input as that param
-    3. Otherwise → pass raw_input as first positional arg
+    Parsing: JSON object kwargs, single required param, or first positional.
+
+    Args:
+        name: Registered tool name.
+            已注册的工具名称。
+        raw_input: Action Input string (JSON or scalar).
+            Action Input 字符串（JSON 或标量）。
+
+    Returns:
+        Tool result string, or Chinese error message on failure.
+            工具结果字符串，失败时返回中文错误信息。
     """
     tools = get_registered_tools()
     if name not in tools:

@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_react_protocol.py
+@DateTime: 2026-05-20
+@Docs: Tests shared ReAct parse_react_output parser.
+    测试共享 ReAct parse_react_output 解析器。
+"""
+
 from opspilot.agent.react_protocol import parse_react_output
 
 

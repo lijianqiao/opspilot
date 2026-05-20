@@ -1,5 +1,10 @@
-"""Offline eval harness: run each scripted case through the real
-ReAct graph and score 3 metrics. One command -> a score table.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: harness.py
+@DateTime: 2026-05-20
+@Docs: Offline eval harness — run scripted cases via ReAct graph and score.
+    离线评测 harness：经 ReAct 图执行脚本用例并输出三维评分表。
 """
 
 from __future__ import annotations
@@ -13,11 +18,32 @@ from opspilot.tools.registry import build_tools_prompt
 
 
 class _ScriptedLLM:
+    """Fake LLM that pops canned replies and records Action tool names.
+
+    脚本化假 LLM：按序弹出预设回复并记录 Action 行中的工具名。
+
+    Args:
+        replies: Canned assistant outputs consumed in order.
+            按顺序消费的预设助手输出列表。
+    """
+
     def __init__(self, replies: list[str]) -> None:
         self._replies = list(replies)
         self.seen_tools: list[str] = []
 
     async def chat(self, messages: list[dict[str, str]]) -> str:
+        """Return next scripted reply and append any Action tool to seen_tools.
+
+        返回下一条脚本回复，并将 Action 行中的工具名追加到 seen_tools。
+
+        Args:
+            messages: Conversation history (ignored except for interface compat).
+                对话历史（仅为接口兼容，内容未使用）。
+
+        Returns:
+            Next canned reply or a default Final Answer when exhausted.
+                下一条脚本回复；用尽时返回默认 Final Answer。
+        """
         reply = self._replies.pop(0) if self._replies else "Final Answer: (脚本结束)"
         for line in reply.splitlines():
             line = line.strip()
@@ -28,6 +54,21 @@ class _ScriptedLLM:
 
 @dataclass(frozen=True)
 class EvalResult:
+    """Per-case scoring breakdown for the eval table.
+
+    单条用例的评分拆解（用于评测表格）。
+
+    Attributes:
+        name: Case name label.
+            用例名称。
+        tool_sequence_ok: Whether observed tools match expected sequence.
+            观测工具序列是否与期望一致。
+        danger_blocked_ok: Whether dangerous ops were blocked as expected.
+            危险操作是否按期望被拦截。
+        answer_keywords_ok: Whether answer (and trace) contain required keywords.
+            答案（及轨迹）是否包含必需关键词。
+    """
+
     name: str
     tool_sequence_ok: bool
     danger_blocked_ok: bool
@@ -35,11 +76,28 @@ class EvalResult:
 
     @property
     def passed(self) -> bool:
+        """True when all three dimension checks succeed.
+
+        当三个维度检查均通过时返回 True。
+        """
         return self.tool_sequence_ok and self.danger_blocked_ok and self.answer_keywords_ok
 
 
 async def _run_with_trace(case: EvalCase, llm: _ScriptedLLM) -> tuple[str, str]:
-    """Run graph and return (final_answer, full_message_text_for_trace_checks)."""
+    """Run graph and return (final_answer, full_message_text_for_trace_checks).
+
+    执行图并返回 (最终答案, 完整消息文本) 供轨迹关键词检查。
+
+    Args:
+        case: Eval case definition.
+            评测用例定义。
+        llm: Scripted LLM instance bound into graph context.
+            注入图上下文的脚本化 LLM 实例。
+
+    Returns:
+        Tuple of final answer string and concatenated trace text.
+            (最终答案字符串, 拼接后的轨迹文本) 元组。
+    """
     _current_llm.set(llm)
     initial_state: dict[str, object] = {
         "messages": [
@@ -72,6 +130,18 @@ async def _run_with_trace(case: EvalCase, llm: _ScriptedLLM) -> tuple[str, str]:
 
 
 async def run_case(case: EvalCase) -> EvalResult:
+    """Execute one eval case and compute three metric dimensions.
+
+    执行单条评测用例并计算三个评分维度。
+
+    Args:
+        case: Eval case to run.
+            待运行的评测用例。
+
+    Returns:
+        EvalResult with per-dimension pass/fail flags.
+            包含各维度通过/失败标志的 EvalResult。
+    """
     llm = _ScriptedLLM(case.scripted_replies)
     if case.trace_keywords:
         answer, trace = await _run_with_trace(case, llm)
@@ -95,10 +165,30 @@ async def run_case(case: EvalCase) -> EvalResult:
 
 
 async def run_all() -> list[EvalResult]:
+    """Run every case in CASES sequentially.
+
+    顺序执行 CASES 中的全部用例。
+
+    Returns:
+        List of EvalResult in case order.
+            按用例顺序排列的 EvalResult 列表。
+    """
     return [await run_case(c) for c in CASES]
 
 
 def format_table(results: list[EvalResult]) -> str:
+    """Format eval results as a fixed-width ASCII score table.
+
+    将评测结果格式化为固定宽度的 ASCII 评分表。
+
+    Args:
+        results: Outcomes from run_all or run_case.
+            run_all 或 run_case 产生的结果列表。
+
+    Returns:
+        Multi-line table string with per-case PASS/FAIL and total.
+            含逐行 PASS/FAIL 与汇总的多行表格字符串。
+    """
     rows = [
         "name                | tools | danger | answer | PASS",
         "--------------------+-------+--------+--------+-----",

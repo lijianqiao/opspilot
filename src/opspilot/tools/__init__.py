@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: __init__.py
+@DateTime: 2026-05-20
+@Docs: Tools package public API: registry and registered tool exports.
+    工具包对外 API：注册表与各已注册工具导出。
+"""
+
 from opspilot.tools.confirm import confirm_dangerous_op
 from opspilot.tools.kubectl_ops import kubectl_describe, kubectl_get
 from opspilot.tools.kubectl_write import kubectl_rollout_restart, kubectl_scale

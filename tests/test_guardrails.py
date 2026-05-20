@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_guardrails.py
+@DateTime: 2026-05-20
+@Docs: Tests is_dangerous detection and output redaction.
+    测试危险操作判定与输出脱敏。
+"""
+
 from opspilot.agent.guardrails import is_dangerous, redact
 
 

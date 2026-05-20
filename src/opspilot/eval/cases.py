@@ -1,8 +1,10 @@
-"""Deterministic eval cases. Each case scripts the LLM replies so the
-whole suite runs offline (no llama.cpp, CI-friendly).
-
-Extension slots (NOT implemented in Stage 2, by design): LLM-as-judge
-for answer quality, trajectory-shortest-path scoring.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: cases.py
+@DateTime: 2026-05-20
+@Docs: Deterministic offline eval cases (scripted LLM replies, CI-friendly).
+    确定性离线评测用例（脚本化 LLM 回复，无需真实模型，适合 CI）。
 """
 
 from __future__ import annotations
@@ -12,6 +14,29 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class EvalCase:
+    """One scripted evaluation scenario for the ReAct graph.
+
+    针对 ReAct 图的一条脚本化评测场景。
+
+    Attributes:
+        name: Short case identifier for reporting.
+            用例短名（用于报告）。
+        question: User question passed to the agent.
+            传给智能体的用户问题。
+        scripted_replies: Canned LLM outputs consumed in order.
+            按顺序消费的脚本化 LLM 回复列表。
+        expected_tool_sequence: Tool names expected in Action lines.
+            Action 行中期望出现的工具名序列。
+        expect_danger_blocked: True when danger ops must not succeed.
+            为 True 时期望危险操作被拦截。
+        answer_keywords: Substrings required in final answer.
+            最终答案中必须包含的子串。
+        trace_keywords: Substrings required in full message trace.
+            完整消息轨迹中必须包含的子串。
+        max_steps: Maximum ReAct steps for this case.
+            本用例允许的最大 ReAct 步数。
+    """
+
     name: str
     question: str
     scripted_replies: list[str]

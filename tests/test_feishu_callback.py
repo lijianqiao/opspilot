@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_feishu_callback.py
+@DateTime: 2026-05-20
+@Docs: Tests Feishu card action confirm/cancel handler.
+    测试飞书卡片确认/取消回调处理。
+"""
+
 from opspilot.agent.confirmation import ConfirmationStore
 from opspilot.entrypoints.feishu_callback import handle_card_action
 

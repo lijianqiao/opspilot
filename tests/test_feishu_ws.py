@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_feishu_ws.py
+@DateTime: 2026-05-20
+@Docs: Tests Feishu WS error redaction and bounded threading.
+    测试飞书 WS 错误脱敏与有界线程池。
+"""
+
 import anyio
 import pytest
 

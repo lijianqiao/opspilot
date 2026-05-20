@@ -1,7 +1,10 @@
-"""retrieve_runbook — hybrid RAG retrieval over Qdrant.
-
-When Qdrant is unavailable, falls back to the original keyword-match
-stub for graceful degradation.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: runbook.py
+@DateTime: 2026-05-20
+@Docs: retrieve_runbook — Qdrant RAG with keyword-match fallback.
+    retrieve_runbook：Qdrant RAG 检索，不可用时关键字回退。
 """
 
 from __future__ import annotations
@@ -110,9 +113,18 @@ def _get_retrieval_service() -> RetrievalService | None:
 
 @register_tool
 def retrieve_runbook(query: str) -> str:
-    """根据故障关键词检索相关 Runbook，返回排查步骤。
+    """Retrieve runbook steps by fault keywords (RAG or keyword fallback).
+    根据故障关键词检索相关 Runbook，返回排查步骤。
 
-    Uses Qdrant RAG when available, falls back to keyword match otherwise.
+    Uses Qdrant RAG when available; otherwise keyword match on fixtures.
+
+    Args:
+        query: Fault description or alert keywords.
+            故障描述或告警关键词。
+
+    Returns:
+        Formatted runbook steps or fallback guidance text.
+            格式化的 Runbook 步骤或回退引导文本。
     """
     svc = _get_retrieval_service()
     if svc is not None:

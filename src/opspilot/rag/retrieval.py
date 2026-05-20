@@ -1,9 +1,10 @@
-"""Hybrid retrieval service — dense + BM25 → RRF fusion → rerank → top-k.
-
-Pipeline:
-  1. Embed query (dense + sparse)
-  2. Hybrid search via Qdrant RRF
-  3. Return top-k document texts (bge-reranker deferred to Stage 4.1)
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: retrieval.py
+@DateTime: 2026-05-20
+@Docs: Hybrid retrieval — embed query, RRF search, return top-k runbooks.
+    混合检索服务：查询嵌入、RRF 检索、返回 top-k Runbook 文本。
 """
 
 from __future__ import annotations
@@ -31,20 +32,43 @@ FALLBACK_RUNBOOK_TEXT = (
 
 
 class RetrievalService:
-    """Orchestrates embedding + hybrid search + formatting."""
+    """Orchestrates embedding + hybrid search + formatting.
+
+    编排嵌入、混合检索与结果格式化。
+    """
 
     def __init__(
         self,
         store: QdrantStore,
         embedding_service: EmbeddingService,
     ) -> None:
+        """Initialize retrieval service.
+
+        初始化检索服务。
+
+        Args:
+            store: Qdrant store for hybrid search.
+                用于混合检索的 Qdrant 存储。
+            embedding_service: Service for query/document embeddings.
+                查询/文档嵌入服务。
+        """
         self._store = store
         self._embedding_service = embedding_service
 
     def retrieve(self, query: str, top_k: int = _DEFAULT_TOP_K) -> list[str]:
         """Retrieve top-k runbook document texts for a query.
 
-        Returns list of document content strings, best match first.
+        为查询检索 top-k 条 Runbook 文档正文。
+
+        Args:
+            query: Natural-language search query.
+                自然语言检索查询。
+            top_k: Number of documents to return.
+                返回文档数量。
+
+        Returns:
+            Document content strings, best match first; empty if collection empty.
+                文档正文列表（最佳匹配在前）；集合为空时返回空列表。
         """
         if self._store.point_count() == 0:
             return []
@@ -75,7 +99,20 @@ class RetrievalService:
     def retrieve_formatted(self, query: str, top_k: int = _DEFAULT_TOP_K) -> str:
         """Retrieve and format as a single runbook text block.
 
-        Signature-compatible with the original retrieve_runbook(query) -> str.
+        检索并格式化为单块 Runbook 文本。
+
+        Compatible with legacy retrieve_runbook(query) -> str signature.
+        与旧版 retrieve_runbook(query) -> str 签名兼容。
+
+        Args:
+            query: Natural-language search query.
+                自然语言检索查询。
+            top_k: Number of documents to include.
+                纳入的文档数量。
+
+        Returns:
+            Formatted runbook text or FALLBACK_RUNBOOK_TEXT if no hits.
+                格式化 Runbook 文本；无命中时返回通用兜底文案。
         """
         docs = self.retrieve(query, top_k=top_k)
         if not docs:

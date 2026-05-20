@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_langgraph_agent.py
+@DateTime: 2026-05-20
+@Docs: Tests LangGraph ReAct graph vs handwritten react.
+    测试 LangGraph ReAct 图与手写 react 行为一致。
+"""
+
 from __future__ import annotations
 
 import pytest

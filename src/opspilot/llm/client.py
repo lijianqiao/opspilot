@@ -1,17 +1,10 @@
-"""Async LLM client (OpenAI-compatible /chat/completions).
-
-容错（审查报告 🔴 llm/client.py 无重试/无熔断/单一 120s 超时）：
-- 重试：tenacity 指数退避+抖动，仅瞬时故障（5xx / httpx.TransportError）；
-  4xx 直接抛出（auth/permission/bad request 不应重试）。attempts=3。
-- 超时：分层 httpx.Timeout(connect=5/read=60/write=10/pool=5)，取代裸 120s。
-- 熔断：连续 N 次逻辑失败 → 打开冷却期，期间立即抛 CircuitOpenError，
-  避免上游持续不可用时仍每次打满重试放大故障/成本。冷却到期后半开
-  探测一次，成功则关闭、失败则再次打开。
-- python-anti-patterns: Double Retry —— 网关层也有 fallback；这里只做 3 次，
-  不在 agent 层再叠加。
-
-测试钩子：_RETRY_WAIT / _RETRY_ATTEMPTS / _CB_THRESHOLD / _CB_COOLDOWN_SECONDS
-都是 module 级常量，可被 monkeypatch 加速测试。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: client.py
+@DateTime: 2026-05-20
+@Docs: Async OpenAI-compatible LLM client with retry and circuit breaker.
+    异步 OpenAI 兼容 LLM 客户端：重试与熔断保护。
 """
 
 from __future__ import annotations
@@ -42,11 +35,20 @@ _CB_COOLDOWN_SECONDS = 30.0
 
 
 class CircuitOpenError(RuntimeError):
-    """Raised while the breaker is open: 快速失败，不再打网络。"""
+    """Raised while the breaker is open — fail fast without network I/O.
+
+    熔断器打开时抛出：快速失败，不再发起网络请求。
+    """
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    """瞬时故障判定：连接/超时 + 上游 5xx。4xx 是客户端错误，不重试。"""
+    """Return True for transient failures (transport errors, 5xx).
+
+    判定是否为可重试的瞬时故障（传输错误、5xx）。
+
+    4xx client errors are not retried.
+    4xx 客户端错误不重试。
+    """
     if isinstance(exc, httpx.TransportError):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
@@ -55,9 +57,27 @@ def _is_retryable(exc: BaseException) -> bool:
 
 
 class LLMClient:
-    """调用 OpenAI 兼容 /chat/completions 的最小异步客户端。"""
+    """Minimal async client for OpenAI-compatible /chat/completions.
+
+    调用 OpenAI 兼容 /chat/completions 的最小异步客户端。
+
+    Features retry with exponential backoff, layered timeouts, and a
+    process-local circuit breaker. Module-level constants are monkeypatchable
+    in tests.
+    支持指数退避重试、分层超时与进程内熔断；模块级常量可在测试中 monkeypatch。
+    """
 
     def __init__(self, settings: Settings, http_client: httpx.AsyncClient | None = None) -> None:
+        """Initialize LLM client.
+
+        初始化 LLM 客户端。
+
+        Args:
+            settings: Application settings (base URL, model, API key).
+                应用配置（基础 URL、模型、API 密钥）。
+            http_client: Optional shared httpx.AsyncClient.
+                可选的共享 httpx.AsyncClient。
+        """
         self._settings = settings
         self._client = http_client or httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
         # 熔断器状态（进程内、单实例）
@@ -65,6 +85,24 @@ class LLMClient:
         self._open_until = 0.0
 
     async def chat(self, messages: Sequence[Message]) -> str:
+        """Send chat completion request and return assistant content.
+
+        发送对话补全请求并返回助手回复内容。
+
+        Args:
+            messages: OpenAI-style message list (role + content).
+                OpenAI 风格消息列表（role + content）。
+
+        Returns:
+            Assistant message content string.
+                助手回复文本。
+
+        Raises:
+            CircuitOpenError: When circuit breaker is open.
+                熔断器打开时。
+            httpx.HTTPStatusError: On non-retryable HTTP errors after retries.
+                重试后仍失败的 HTTP 错误。
+        """
         # 熔断器：打开期内快速失败
         now = time.monotonic()
         if now < self._open_until:
@@ -116,4 +154,8 @@ class LLMClient:
             )
 
     async def aclose(self) -> None:
+        """Close the underlying HTTP client.
+
+        关闭底层 HTTP 客户端。
+        """
         await self._client.aclose()

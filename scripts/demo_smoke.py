@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: demo_smoke.py
+@DateTime: 2026-05-20
+@Docs: Quick smoke script against local stack or mocks.
+    对本地栈或 mock 的快速冒烟脚本。
+"""
+
 from __future__ import annotations
 
 import argparse

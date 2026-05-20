@@ -1,4 +1,11 @@
-"""Mock kubectl tools — reads from fixtures."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: kubectl_ops.py
+@DateTime: 2026-05-20
+@Docs: Mock read-only kubectl tools (get, describe) from fixtures.
+    模拟只读 kubectl 工具（get、describe），数据来自 fixture。
+"""
 
 from __future__ import annotations
 
@@ -12,7 +19,19 @@ _FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 @register_tool
 def kubectl_get(resource: str, namespace: str = "default") -> str:
-    """查询 k8s 资源列表，类似 kubectl get。当前支持 pods。"""
+    """List Kubernetes resources (kubectl get style); pods supported.
+    查询 k8s 资源列表，类似 kubectl get。当前支持 pods。
+
+    Args:
+        resource: Resource type (e.g. pods).
+            资源类型（如 pods）。
+        namespace: Namespace to query.
+            要查询的命名空间。
+
+    Returns:
+        Tabular listing or unsupported-resource message.
+            表格化列表或不支持资源类型的提示。
+    """
     if resource == "pods":
         raw = json.loads((_FIXTURES_DIR / "kubectl_pods.json").read_text(encoding="utf-8"))
         pods = [p for p in raw["pods"] if p["namespace"] == namespace]
@@ -26,7 +45,21 @@ def kubectl_get(resource: str, namespace: str = "default") -> str:
 
 @register_tool
 def kubectl_describe(resource: str, name: str, namespace: str = "default") -> str:
-    """查看 k8s 资源详情，类似 kubectl describe。返回 spec、status 和 events。"""
+    """Describe a Kubernetes resource (spec, status, events).
+    查看 k8s 资源详情，类似 kubectl describe。返回 spec、status 和 events。
+
+    Args:
+        resource: Resource kind (e.g. pod).
+            资源种类（如 pod）。
+        name: Resource name.
+            资源名称。
+        namespace: Resource namespace.
+            资源命名空间。
+
+    Returns:
+        Formatted describe output or not-found message.
+            格式化的 describe 输出或未找到提示。
+    """
     raw = json.loads((_FIXTURES_DIR / "kubectl_describe.json").read_text(encoding="utf-8"))
     for item in raw["resources"]:
         if item["kind"] == resource and item["name"] == name and item["namespace"] == namespace:

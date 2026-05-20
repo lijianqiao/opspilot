@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_pod_status.py
+@DateTime: 2026-05-20
+@Docs: Tests get_pod_status fixture-based kubectl mock.
+    测试 get_pod_status fixture 模拟 kubectl。
+"""
+
 from opspilot.tools.pod_status import get_pod_status
 
 

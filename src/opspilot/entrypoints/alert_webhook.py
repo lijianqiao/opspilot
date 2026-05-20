@@ -1,11 +1,10 @@
-"""FastAPI HTTP endpoint for Alertmanager webhooks.
-
-Start with: uvicorn opspilot.entrypoints.alert_webhook:app --port 8000
-
-安全：
-- HMAC-SHA256 verify_alertmanager_signature(body, sig) 校验 X-OpsPilot-Signature 头；
-  未配置 OPSPILOT_ALERTMANAGER_HMAC_SECRET → 503 fail-closed，避免裸奔。
-- 异常响应固定文案，避免堆栈/DSN/密钥泄露（审查报告）。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: alert_webhook.py
+@DateTime: 2026-05-20
+@Docs: FastAPI Alertmanager webhook — HMAC verify and alert diagnosis.
+    Alertmanager Webhook 端点：HMAC 校验与告警诊断。
 """
 
 from __future__ import annotations
@@ -27,7 +26,24 @@ app = FastAPI(title="OpsPilot Alert Handler")
 
 @app.post("/alert")
 async def receive_alert(request: Request, x_opspilot_signature: str = Header(default="")) -> dict[str, str]:
-    """Receive Alertmanager webhook, verify HMAC signature, return diagnosis."""
+    """Receive Alertmanager webhook, verify HMAC, return diagnosis.
+
+    接收 Alertmanager Webhook，校验 HMAC 签名并返回诊断结果。
+
+    Security: unconfigured OPSPILOT_ALERTMANAGER_HMAC_SECRET → 503 fail-closed;
+    error responses use fixed redacted text to avoid leaking secrets/stack traces.
+    安全：未配置密钥时 503；异常响应使用固定脱敏文案，避免泄露密钥或堆栈。
+
+    Args:
+        request: Incoming HTTP request (body read for HMAC).
+            入站 HTTP 请求（读取 body 用于 HMAC）。
+        x_opspilot_signature: Hex HMAC digest header.
+            X-OpsPilot-Signature 十六进制摘要头。
+
+    Returns:
+        Dict with status and diagnosis fields.
+            含 status 与 diagnosis 字段的字典。
+    """
     raw_body = await request.body()
     # Fail-closed on unconfigured secret; raises HTTPException(401) on bad sig.
     verify_alertmanager_signature(raw_body, x_opspilot_signature)

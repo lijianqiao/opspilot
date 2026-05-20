@@ -1,8 +1,10 @@
-"""Unified guarded tool execution — single chokepoint for every agent.
-
-合并原本在 langgraph_agent.tool_node 与 plan_execute.executor_node 重复的逻辑：
-  调用上限 → 危险判定 → 人工确认门（ConfirmationStore）→ 审计 → 执行 → redact。
-任何 agent 执行工具都必须走这里，确保安全策略只有一处实现。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: tool_exec.py
+@DateTime: 2026-05-20
+@Docs: Unified guarded tool execution chokepoint for every agent.
+    统一受控工具执行入口，供所有智能体共用。
 """
 
 from __future__ import annotations
@@ -19,6 +21,18 @@ from opspilot.tools.registry import call_tool
 
 @dataclass(frozen=True)
 class GuardedResult:
+    """Result of a guarded tool invocation.
+    受控工具调用的执行结果。
+
+    Attributes:
+        observation: Redacted tool output or block message for the agent.
+            脱敏后的工具输出或拦截提示，供智能体观测。
+        blocked: True when the call was not executed (cap, danger, pending).
+            为 True 表示未实际执行（超限、危险、待确认）。
+        request_id: Pending confirmation id when blocked for HITL, else None.
+            因人工确认被拦截时的 request_id，否则为 None。
+    """
+
     observation: str
     blocked: bool
     request_id: str | None = None
@@ -35,7 +49,31 @@ def guarded_call_tool(
     audit_path: str | None = None,
     actor: str = "agent",
 ) -> GuardedResult:
-    """All-in-one safety gate: cap → danger check → HITL → audit → execute → redact."""
+    """All-in-one safety gate: cap, danger check, HITL, audit, execute, redact.
+    一体化安全门：调用上限、危险判定、人工确认、审计、执行、脱敏。
+
+    Args:
+        tool_name: Registered tool name.
+            已注册的工具名称。
+        raw_input: Raw Action Input string.
+            Action Input 原始字符串。
+        calls: Current tool call count (1-based for this attempt).
+            当前工具调用次数（本次尝试为第几次）。
+        max_calls: Maximum allowed tool calls per run.
+            单次运行允许的最大工具调用次数。
+        store: Confirmation store; defaults to process-wide STORE.
+            确认状态存储；默认使用进程级 STORE。
+        confirmed_request_id: Prior HITL approval id to allow dangerous ops.
+            已获批的危险操作 request_id。
+        audit_path: Optional audit log file path.
+            可选审计日志文件路径。
+        actor: Actor label recorded in audit entries.
+            审计记录中的操作者标识。
+
+    Returns:
+        GuardedResult with observation and blocked flag.
+            含 observation 与 blocked 标志的 GuardedResult。
+    """
     store = store if store is not None else STORE
 
     if calls > max_calls:

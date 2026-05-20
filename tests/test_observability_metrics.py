@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_observability_metrics.py
+@DateTime: 2026-05-20
+@Docs: Tests Prometheus metrics for tools, LLM, guardrails.
+    测试工具/LLM/护栏 Prometheus 指标。
+"""
+
 from opspilot.observability.metrics import (
     record_agent_request,
     record_guardrail_block,

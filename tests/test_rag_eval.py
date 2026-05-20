@@ -1,4 +1,11 @@
-"""Test that RAGAS evaluation pipeline validates correctly."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_rag_eval.py
+@DateTime: 2026-05-20
+@Docs: Tests RAGAS-style RAG eval pipeline wiring.
+    测试 RAGAS 风格 RAG 评估管线接线。
+"""
 
 import json
 from pathlib import Path

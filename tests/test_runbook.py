@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_runbook.py
+@DateTime: 2026-05-20
+@Docs: Tests retrieve_runbook keyword/RAG fallback paths.
+    测试 retrieve_runbook 关键词/RAG 回退路径。
+"""
+
 from concurrent.futures import ThreadPoolExecutor
 
 from opspilot.rag.retrieval import FALLBACK_RUNBOOK_TEXT

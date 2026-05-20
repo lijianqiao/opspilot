@@ -1,4 +1,10 @@
-"""Ingest runbook Markdown docs into Qdrant.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: ingest_runbooks.py
+@DateTime: 2026-05-20
+@Docs: CLI: ingest runbook Markdown into Qdrant.
+    CLI：将 Runbook Markdown 导入 Qdrant。
 
 Usage:
     uv run python scripts/ingest_runbooks.py

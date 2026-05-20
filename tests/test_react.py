@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_react.py
+@DateTime: 2026-05-20
+@Docs: Tests hand-written run_react reference loop.
+    测试手写 run_react 参照实现循环。
+"""
+
 import pytest
 
 from opspilot.agent.react import run_react

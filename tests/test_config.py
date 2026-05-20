@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_config.py
+@DateTime: 2026-05-20
+@Docs: Tests Settings defaults and get_settings LRU cache.
+    测试 Settings 默认值与 get_settings 缓存。
+"""
+
 import pytest
 
 from opspilot.config import Settings, get_settings

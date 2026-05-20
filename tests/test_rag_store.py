@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_rag_store.py
+@DateTime: 2026-05-20
+@Docs: Tests QdrantStore CRUD and hybrid search.
+    测试 QdrantStore 增删查与混合搜索。
+"""
+
 import pytest
 
 from opspilot.rag.qdrant_store import COLLECTION_NAME, QdrantStore

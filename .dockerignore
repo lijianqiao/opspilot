@@ -5,5 +5,3 @@
 __pycache__
 *.pyc
 docs/superpowers
-experiments/stage5_finetune/output
-experiments/stage5_finetune/data

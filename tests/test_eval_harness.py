@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_eval_harness.py
+@DateTime: 2026-05-20
+@Docs: Tests offline eval harness three-metric scoring.
+    测试离线 eval 三指标评分 harness。
+"""
+
 import pytest
 
 from opspilot.eval.cases import CASES

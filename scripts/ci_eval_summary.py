@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: ci_eval_summary.py
+@DateTime: 2026-05-20
+@Docs: CI helper: summarize eval harness results for pipelines.
+    CI 辅助：汇总 eval harness 结果供流水线使用。
+"""
+
 from __future__ import annotations
 
 import argparse

@@ -1,4 +1,11 @@
-"""Tests for the gateway FastAPI app."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_gateway_app.py
+@DateTime: 2026-05-20
+@Docs: Tests LLM Gateway auth, rate limit, and transport fallback.
+    测试 LLM Gateway 鉴权、限流与传输层 fallback。
+"""
 
 from __future__ import annotations
 

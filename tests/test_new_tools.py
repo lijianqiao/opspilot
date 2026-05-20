@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_new_tools.py
+@DateTime: 2026-05-20
+@Docs: Tests newly registered tools appear in registry prompt.
+    测试新注册工具出现在 registry prompt。
+"""
+
 from __future__ import annotations
 
 from opspilot.tools.kubectl_ops import kubectl_describe, kubectl_get

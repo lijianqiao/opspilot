@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_confirm.py
+@DateTime: 2026-05-20
+@Docs: Tests confirm_dangerous_op guidance tool (no self-auth).
+    测试 confirm_dangerous_op 提示工具（不可自放行）。
+"""
+
 from opspilot.tools.confirm import confirm_dangerous_op
 from opspilot.tools.registry import get_registered_tools
 

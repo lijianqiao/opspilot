@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_kubectl_write.py
+@DateTime: 2026-05-20
+@Docs: Tests mock kubectl write tools and rollback_info_for.
+    测试 mock 写工具与 rollback_info_for。
+"""
+
 from opspilot.tools.kubectl_write import kubectl_rollout_restart, kubectl_scale, rollback_info_for
 from opspilot.tools.registry import get_registered_tools
 

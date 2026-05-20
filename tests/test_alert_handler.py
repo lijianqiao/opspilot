@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_alert_handler.py
+@DateTime: 2026-05-20
+@Docs: Tests alert diagnosis handler and runbook integration.
+    测试告警诊断处理与 Runbook 集成。
+"""
+
 import json
 from pathlib import Path
 

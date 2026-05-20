@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_cli.py
+@DateTime: 2026-05-20
+@Docs: Tests Typer CLI ask command with mocked agent.
+    测试 Typer CLI ask 命令（mock 智能体）。
+"""
+
 import pytest
 from typer.testing import CliRunner
 

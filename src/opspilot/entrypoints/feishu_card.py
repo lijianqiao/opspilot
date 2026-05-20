@@ -1,11 +1,10 @@
-"""Feishu interactive card: danger-op confirmation flow.
-
-危险操作拦截时由 supervisor/agent 发送确认卡片给运维人员；
-点击"确认执行"按钮 → Feishu callback 调用 confirm_from_card()
-→ 委托 agent.confirmation.STORE 状态机放行。
-
-旧的进程内 _pending_confirmations dict 已删除——状态机统一在
-ConfirmationStore（带 TTL + 一次性 + actor 记录 + 常量时间比较）。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: feishu_card.py
+@DateTime: 2026-05-20
+@Docs: Feishu interactive cards for danger-op human confirmation flow.
+    飞书交互卡片：危险操作人工确认流程。
 """
 
 from __future__ import annotations
@@ -18,7 +17,25 @@ from opspilot.agent.confirmation import STORE, ConfirmationStore
 def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: str) -> str:
     """Build a Feishu interactive card asking for human confirmation.
 
-    按钮 value 携带 request_id + token，使卡片回调能调用 STORE.confirm(request_id, token, actor)。
+    构建请求人工确认的飞书交互卡片 JSON。
+
+    Button values carry request_id + token so the callback can call
+    STORE.confirm(request_id, token, actor).
+    按钮 value 携带 request_id 与 token，供回调调用 STORE.confirm。
+
+    Args:
+        request_id: Pending confirmation request ID.
+            待确认请求 ID。
+        token: One-time confirmation token.
+            一次性确认令牌。
+        tool_name: Name of the guarded tool.
+            被拦截的工具名称。
+        tool_input: Serialized tool input for display.
+            用于展示的工具入参。
+
+    Returns:
+        JSON string of the interactive card payload.
+            交互卡片载荷的 JSON 字符串。
     """
     return json.dumps(
         {
@@ -55,5 +72,22 @@ def build_confirm_card(request_id: str, token: str, tool_name: str, tool_input: 
 
 
 def confirm_from_card(request_id: str, token: str, actor: str, store: ConfirmationStore | None = None) -> bool:
-    """Thin adapter: 飞书卡片回调拿到 (request_id, token, actor) → 委托 STORE 放行。"""
+    """Thin adapter: card callback (request_id, token, actor) → STORE.confirm.
+
+    薄适配层：飞书卡片回调拿到 (request_id, token, actor) 后委托 STORE 放行。
+
+    Args:
+        request_id: Pending confirmation request ID.
+            待确认请求 ID。
+        token: One-time confirmation token from the card.
+            卡片携带的一次性确认令牌。
+        actor: Operator identity (e.g. feishu:open_id).
+            操作者标识（如 feishu:open_id）。
+        store: Optional ConfirmationStore; defaults to global STORE.
+            可选确认存储；默认使用全局 STORE。
+
+    Returns:
+        True if confirmation succeeded.
+            确认成功返回 True。
+    """
     return (store if store is not None else STORE).confirm(request_id, token, actor)

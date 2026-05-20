@@ -1,13 +1,10 @@
-"""ReAct agent implemented as a LangGraph StateGraph.
-
-This is the LangGraph migration of the hand-written loop in react.py.
-Same SupportsChat protocol, same tool registry, same regex parsing —
-but using StateGraph for state management, conditional edges, and
-future checkpoint support.
-
-Learning comparison (see docs/stages/stage1_agent_core.md):
-- Hand-written: explicit for-loop, manual message list append
-- LangGraph: declarative graph, state reducer, conditional routing
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: langgraph_agent.py
+@DateTime: 2026-05-20
+@Docs: ReAct agent as LangGraph StateGraph with guarded tool execution.
+    ReAct 智能体的 LangGraph 实现，集成受控工具执行。
 """
 
 from __future__ import annotations
@@ -43,6 +40,22 @@ def _append_messages(left: list[dict[str, str]], right: list[dict[str, str]]) ->
 
 
 class AgentState(TypedDict):
+    """LangGraph state for the ReAct agent graph.
+    ReAct 智能体图的 LangGraph 状态。
+
+    Attributes:
+        messages: Conversation history with append reducer.
+            带追加归约器的对话历史。
+        question: Original user question (informational).
+            用户原始问题（信息字段）。
+        steps_taken: LLM turns completed so far.
+            已完成的 LLM 轮次数。
+        max_steps: Maximum LLM turns before stop.
+            停止前的最大 LLM 轮次数。
+        tool_calls: Tool invocations counted toward the cap.
+            计入上限的工具调用次数。
+    """
+
     messages: Annotated[list[dict[str, str]], _append_messages]
     question: str
     steps_taken: int
@@ -60,7 +73,17 @@ _current_llm: ContextVar[SupportsChat] = ContextVar("_current_llm")
 
 
 async def agent_node(state: AgentState) -> dict[str, Any]:
-    """Call the LLM and append the reply to messages."""
+    """Call the LLM and append the assistant reply to messages.
+    调用 LLM 并将助手回复追加到 messages。
+
+    Args:
+        state: Current agent state including messages.
+            含 messages 的当前智能体状态。
+
+    Returns:
+        State update with one assistant message and incremented steps_taken.
+            含一条助手消息且 steps_taken 加一的状态更新。
+    """
     llm = _current_llm.get(None)
     if llm is None:
         raise RuntimeError("LLM not set. Call run_react_graph() which sets _current_llm.")
@@ -74,7 +97,17 @@ async def agent_node(state: AgentState) -> dict[str, Any]:
 
 
 async def tool_node(state: AgentState) -> dict[str, Any]:
-    """Parse Action, route through unified guarded_call_tool, return Observation."""
+    """Parse Action and run guarded_call_tool; append Observation message.
+    解析 Action 并经 guarded_call_tool 执行；追加 Observation 消息。
+
+    Args:
+        state: Agent state with latest assistant message.
+            含最新助手消息的智能体状态。
+
+    Returns:
+        State update with Observation user message and tool_calls count.
+            含 Observation 用户消息与 tool_calls 计数的状态更新。
+    """
     last_msg = state["messages"][-1]["content"]
     parsed = parse_react_output(last_msg)
     if parsed.action is None:
@@ -99,7 +132,17 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
 
 
 def should_continue(state: AgentState) -> str:
-    """Decide whether to call tools, stop (final answer), or give up (max steps)."""
+    """Route to tools, end on Final Answer, or end on limits / no Action.
+    路由到 tools、因 Final Answer 结束，或因上限/无 Action 结束。
+
+    Args:
+        state: Current agent state.
+            当前智能体状态。
+
+    Returns:
+        Edge label "tools" or "end".
+            边标签 "tools" 或 "end"。
+    """
     if state["tool_calls"] > get_settings().agent_max_tool_calls:
         return "end"
 
@@ -145,10 +188,23 @@ async def run_react_graph(
     tool_filter: set[str] | None = None,
 ) -> str:
     """Run the ReAct loop via LangGraph StateGraph.
+    通过 LangGraph StateGraph 运行 ReAct 循环。
 
-    API-compatible with run_react() from react.py — same inputs, same
-    outputs. The difference is internal: uses a compiled StateGraph
-    with conditional edges instead of a for-loop.
+    API-compatible with run_react() from react.py.
+
+    Args:
+        question: User question or task.
+            用户问题或任务。
+        llm: Chat backend implementing SupportsChat.
+            实现 SupportsChat 的对话后端。
+        max_steps: Maximum LLM turns.
+            最大 LLM 轮次数。
+        tool_filter: Optional tool name subset for the system prompt.
+            系统提示中可选的工具名子集。
+
+    Returns:
+        Final Answer text or step/limit message.
+            Final Answer 文本或步数/上限提示。
     """
     system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=tool_filter)}"
 
@@ -195,10 +251,16 @@ async def run_react_graph(
 
 
 def build_checkpointed_runner(checkpointer: Any) -> Any:
-    """Return an async run() bound to a checkpointer, keyed by thread_id.
+    """Return async run() bound to a checkpointer, keyed by thread_id.
+    返回绑定 checkpointer 的 async run()，按 thread_id 恢复会话。
 
-    Memory comes purely from the checkpointer: re-invoking with the same
-    thread_id restores prior messages, so a kill+restart resumes.
+    Args:
+        checkpointer: LangGraph checkpointer instance.
+            LangGraph checkpointer 实例。
+
+    Returns:
+        Async callable (question, llm, thread_id, max_steps) -> str.
+            异步可调用对象 (question, llm, thread_id, max_steps) -> str。
     """
     compiled = _build_graph(checkpointer)
 
@@ -228,10 +290,16 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
 
 
 def build_postgres_runner(dsn: str) -> tuple[Any, Any]:
-    """Real backend per ARCHITECTURE.md. Creates tables on first use.
+    """Create Postgres-backed checkpointed runner; returns (run_fn, context_manager).
+    创建 Postgres 持久化 checkpoint 运行器；返回 (run_fn, context_manager)。
 
-    Returns (run_fn, context_manager). Caller must call
-    context_manager.__exit__(None, None, None) on shutdown.
+    Args:
+        dsn: PostgreSQL connection string for LangGraph checkpointer.
+            LangGraph checkpointer 的 PostgreSQL 连接串。
+
+    Returns:
+        Tuple of (run callable, context manager to close on shutdown).
+            (run 可调用对象, 关闭时调用的上下文管理器) 元组。
     """
     from langgraph.checkpoint.postgres import PostgresSaver
 

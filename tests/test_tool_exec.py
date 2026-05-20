@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_tool_exec.py
+@DateTime: 2026-05-20
+@Docs: Tests unified guarded_call_tool chokepoint.
+    测试统一 guarded_call_tool 受控执行。
+"""
+
 from opspilot.agent.confirmation import ConfirmationStore
 from opspilot.agent.tool_exec import GuardedResult, guarded_call_tool
 

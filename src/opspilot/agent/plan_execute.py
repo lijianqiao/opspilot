@@ -1,8 +1,10 @@
-"""Plan-Execute agent as a LangGraph StateGraph.
-
-Planner -> Executor (per step, reuses tool registry) -> Replan.
-Sibling of langgraph_agent.py (ReAct). Same _current_llm ContextVar
-pattern, same regex tool protocol, same guardrail-aware execution.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: plan_execute.py
+@DateTime: 2026-05-20
+@Docs: Plan-Execute agent as LangGraph: plan, execute, replan.
+    Plan-Execute 智能体：规划、执行、再规划的 LangGraph 实现。
 """
 
 from __future__ import annotations
@@ -31,6 +33,28 @@ def _append(left: list[dict[str, str]], right: list[dict[str, str]]) -> list[dic
 
 
 class PlanState(TypedDict):
+    """LangGraph state for the Plan-Execute graph.
+    Plan-Execute 图的 LangGraph 状态。
+
+    Attributes:
+        question: Original user task.
+            用户原始任务。
+        plan: Ordered list of step descriptions from the planner.
+            规划器生成的有序步骤描述列表。
+        cursor: Index of the next step to execute.
+            下一个待执行步骤的索引。
+        results: Accumulated per-step execution results.
+            各步骤执行结果的累积列表。
+        final: Synthesized final answer when replan decides DONE.
+            再规划判定 DONE 时的综合最终答案。
+        steps_taken: Number of executor iterations so far.
+            已执行的执行器迭代次数。
+        max_steps: Step budget before forced stop.
+            强制停止前的步数预算。
+        tool_calls: Tool invocations counted toward the cap.
+            计入上限的工具调用次数。
+    """
+
     question: str
     plan: list[str]
     cursor: int
@@ -53,6 +77,17 @@ def _llm() -> SupportsChat:
 
 
 async def planner_node(state: PlanState) -> dict[str, Any]:
+    """LLM planner: decompose the user task into ordered executable steps.
+    LLM 规划节点：将用户任务拆解为有序可执行步骤。
+
+    Args:
+        state: Plan state with question.
+            含 question 的规划状态。
+
+    Returns:
+        State update with plan list and cursor reset to 0.
+            含 plan 列表且 cursor 置 0 的状态更新。
+    """
     prompt = (
         f"你是运维助手 OpsPilot 的规划器。请把用户任务拆成有序的执行步骤。\n\n"
         f"要求：\n"
@@ -73,6 +108,17 @@ async def planner_node(state: PlanState) -> dict[str, Any]:
 
 
 async def executor_node(state: PlanState) -> dict[str, Any]:
+    """Execute one plan step via ReAct tool protocol and guarded_call_tool.
+    通过 ReAct 工具协议与 guarded_call_tool 执行单个规划步骤。
+
+    Args:
+        state: Plan state with plan, cursor, and counters.
+            含 plan、cursor 与计数器的规划状态。
+
+    Returns:
+        State update with one result row and advanced cursor.
+            含一条 result 记录且 cursor 前进的状态更新。
+    """
     step = state["plan"][state["cursor"]]
     sys = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=_pe_tool_filter.get())}"
     reply = await _llm().chat(
@@ -114,6 +160,17 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
 
 
 async def replan_node(state: PlanState) -> dict[str, Any]:
+    """LLM replan: decide DONE with final answer or request more planning.
+    LLM 再规划节点：判定 DONE 并给出最终答案，或要求继续规划。
+
+    Args:
+        state: Plan state with question and accumulated results.
+            含 question 与累积 results 的规划状态。
+
+    Returns:
+        State update with final answer or empty final to trigger replan.
+            含 final 答案或空 final 以触发再规划的状态更新。
+    """
     summary = "\n".join(f"- {r['step']}: {r['result']}" for r in state["results"])
     reply = await _llm().chat(
         [
@@ -175,7 +232,23 @@ _compiled = _build_graph()
 async def run_plan_execute(
     question: str, llm: SupportsChat, max_steps: int = 20, tool_filter: set[str] | None = None
 ) -> str:
-    """Run the Plan-Execute loop. API-shaped like run_react_graph()."""
+    """Run the Plan-Execute loop; API-shaped like run_react_graph().
+    运行 Plan-Execute 循环；API 形态与 run_react_graph() 一致。
+
+    Args:
+        question: User task description.
+            用户任务描述。
+        llm: Chat backend implementing SupportsChat.
+            实现 SupportsChat 的对话后端。
+        max_steps: Maximum executor/replan iterations.
+            执行器/再规划的最大迭代次数。
+        tool_filter: Optional subset of tool names for the executor prompt.
+            执行器提示中可选的工具名子集。
+
+    Returns:
+        Final synthesized answer or last step result / limit message.
+            综合最终答案、最后一步结果或步数上限提示。
+    """
     _current_llm.set(llm)
     _pe_tool_filter.set(tool_filter)
     init: dict[str, Any] = {

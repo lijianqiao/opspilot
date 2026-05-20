@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_confirmation.py
+@DateTime: 2026-05-20
+@Docs: Tests HITL ConfirmationStore TTL and one-time tokens.
+    测试人工确认 ConfirmationStore（TTL、一次性 token）。
+"""
+
 import time
 
 from opspilot.agent.confirmation import ConfirmationStore

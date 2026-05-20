@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_rag_ingestion.py
+@DateTime: 2026-05-20
+@Docs: Tests runbook chunking and Qdrant ingestion.
+    测试 Runbook 分块与 Qdrant 导入。
+"""
+
 from opspilot.rag.ingestion import chunk_markdown
 
 

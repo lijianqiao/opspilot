@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_rag_retrieval.py
+@DateTime: 2026-05-20
+@Docs: Tests RetrievalService hybrid search formatting.
+    测试 RetrievalService 混合检索与格式化。
+"""
+
 from opspilot.rag.embedding import EmbeddingService
 from opspilot.rag.qdrant_store import QdrantStore
 from opspilot.rag.retrieval import RetrievalService

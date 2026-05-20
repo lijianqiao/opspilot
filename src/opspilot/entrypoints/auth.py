@@ -1,7 +1,10 @@
-"""Shared HTTP auth: Bearer token + Alertmanager HMAC signature.
-
-设计原则：fail-closed —— 若服务侧未配置密钥/秘密，直接 503
-（"unconfigured" 状态比"裸奔"安全得多）。常量时间比较防时序侧信道。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: auth.py
+@DateTime: 2026-05-20
+@Docs: Shared HTTP auth — Bearer token and Alertmanager HMAC verification.
+    共享 HTTP 鉴权：Bearer 令牌与 Alertmanager HMAC 签名校验。
 """
 
 from __future__ import annotations
@@ -16,10 +19,20 @@ from opspilot.config import get_settings
 
 
 async def require_bearer(authorization: str = Header(default="")) -> None:
-    """FastAPI dependency：校验 Authorization: Bearer <token>。
+    """FastAPI dependency: validate Authorization Bearer token.
 
-    服务侧 OPSPILOT_API_AUTH_TOKEN 为空 → 503（fail-closed）。
-    Header 缺失/格式错/值不匹配 → 401。
+    FastAPI 依赖：校验 Authorization: Bearer 令牌。
+
+    Fail-closed: empty OPSPILOT_API_AUTH_TOKEN → 503; bad/missing header → 401.
+    未配置 OPSPILOT_API_AUTH_TOKEN 时返回 503；缺失或错误令牌返回 401。
+
+    Args:
+        authorization: Raw Authorization header value.
+            Authorization 请求头原始值。
+
+    Raises:
+        HTTPException: 503 if auth not configured, 401 if unauthorized.
+            未配置鉴权时 503，未授权时 401。
     """
     token = get_settings().api_auth_token
     if not token:
@@ -30,10 +43,22 @@ async def require_bearer(authorization: str = Header(default="")) -> None:
 
 
 def verify_alertmanager_signature(raw_body: bytes, signature: str) -> None:
-    """校验 Alertmanager webhook HMAC-SHA256(body, secret) 签名。
+    """Verify Alertmanager webhook HMAC-SHA256(body, secret) signature.
 
-    服务侧 OPSPILOT_ALERTMANAGER_HMAC_SECRET 为空 → 503。
-    签名不匹配 → 401。
+    校验 Alertmanager Webhook 的 HMAC-SHA256(body, secret) 签名。
+
+    Fail-closed: empty OPSPILOT_ALERTMANAGER_HMAC_SECRET → 503; mismatch → 401.
+    未配置密钥时 503；签名不匹配时 401。
+
+    Args:
+        raw_body: Raw request body bytes.
+            请求体原始字节。
+        signature: Hex digest from X-OpsPilot-Signature header.
+            X-OpsPilot-Signature 头中的十六进制摘要。
+
+    Raises:
+        HTTPException: 503 if secret not configured, 401 if signature invalid.
+            未配置密钥时 503，签名无效时 401。
     """
     secret = get_settings().alertmanager_hmac_secret
     if not secret:

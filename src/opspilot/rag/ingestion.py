@@ -1,10 +1,10 @@
-"""Ingestion pipeline: parse Markdown → chunk → embed → upsert into Qdrant.
-
-Ingestion flow:
-  1. Walk fixtures/runbook_docs/ for *.md files
-  2. Chunk each doc by headings (## / ### level)
-  3. Generate dense + sparse embeddings via EmbeddingService
-  4. Upsert into QdrantStore
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: ingestion.py
+@DateTime: 2026-05-20
+@Docs: Markdown ingestion — chunk, embed, upsert runbooks into Qdrant.
+    Markdown 入库流水线：分块、嵌入并写入 Qdrant。
 """
 
 from __future__ import annotations
@@ -28,7 +28,20 @@ _BATCH_SIZE = 32
 
 @dataclass(frozen=True)
 class MarkdownChunk:
-    """A chunk of a Markdown document, split by section headings."""
+    """A Markdown document chunk split by section headings.
+
+    按章节标题切分后的 Markdown 文档块。
+
+    Attributes:
+        source: Source filename.
+            源文件名。
+        title: Document title (first # heading).
+            文档标题（首个 # 标题）。
+        section: Section heading text.
+            章节标题文本。
+        content: Full chunk text (heading + body).
+            块全文（标题 + 正文）。
+    """
 
     source: str  # filename
     title: str  # document title (first # heading)
@@ -39,8 +52,22 @@ class MarkdownChunk:
 def chunk_markdown(text: str, source: str = "") -> list[MarkdownChunk]:
     """Split a Markdown document into chunks by ## / ### headings.
 
-    Each chunk = heading line + body text until the next heading.
-    Chunks below _MIN_CHUNK_CHARS are merged with the previous chunk.
+    按 ## / ### 标题将 Markdown 文档切分为块。
+
+    Each chunk = heading line + body until the next heading.
+    每块 = 标题行 + 正文，直至下一标题。
+    Chunks below _MIN_CHUNK_CHARS merge with the previous chunk.
+    低于最小字符数的块会与上一块合并。
+
+    Args:
+        text: Full Markdown document text.
+            完整 Markdown 文档文本。
+        source: Source filename for metadata.
+            用于元数据的源文件名。
+
+    Returns:
+        List of MarkdownChunk instances.
+            MarkdownChunk 实例列表。
     """
     if not text.strip():
         return []
@@ -105,7 +132,19 @@ def ingest_all(
 ) -> int:
     """Ingest all Markdown docs from docs_dir into Qdrant.
 
-    Returns total number of chunks ingested.
+    将 docs_dir 下全部 Markdown 文档入库到 Qdrant。
+
+    Args:
+        store: Qdrant store instance.
+            Qdrant 存储实例。
+        embedding_service: Embedding service for dense/sparse vectors.
+            生成稠密/稀疏向量的嵌入服务。
+        docs_dir: Directory containing *.md runbook files.
+            存放 *.md Runbook 文件的目录。
+
+    Returns:
+        Total number of chunks in the collection after ingestion.
+            入库后集合中的块总数。
     """
     store.ensure_collection()
     docs = _load_documents(docs_dir)

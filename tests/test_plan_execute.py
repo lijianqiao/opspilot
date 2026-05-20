@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_plan_execute.py
+@DateTime: 2026-05-20
+@Docs: Tests Plan-Execute agent graph and guarded executor.
+    测试 Plan-Execute 图与受控 executor。
+"""
+
 import pytest
 
 from opspilot.agent.plan_execute import run_plan_execute

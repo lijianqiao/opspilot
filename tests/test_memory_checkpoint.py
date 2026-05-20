@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_memory_checkpoint.py
+@DateTime: 2026-05-20
+@Docs: Tests Postgres LangGraph checkpointer integration.
+    测试 Postgres LangGraph checkpointer 集成。
+"""
+
 import os
 
 import pytest

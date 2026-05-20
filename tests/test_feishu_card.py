@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_feishu_card.py
+@DateTime: 2026-05-20
+@Docs: Tests Feishu confirmation card bridge to ConfirmationStore.
+    测试飞书确认卡片与 ConfirmationStore 桥接。
+"""
+
 import json
 
 from opspilot.entrypoints.feishu_card import build_confirm_card, confirm_from_card

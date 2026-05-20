@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_registry_risk.py
+@DateTime: 2026-05-20
+@Docs: Tests ToolInfo risk and reversible metadata.
+    测试 ToolInfo 风险与可回滚元数据。
+"""
+
 from opspilot.tools.registry import (
     ToolInfo,
     get_registered_tools,

@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_rag_embedding.py
+@DateTime: 2026-05-20
+@Docs: Tests EmbeddingService dense/sparse vectors.
+    测试 EmbeddingService 稠密/稀疏向量。
+"""
+
 import numpy as np
 
 from opspilot.rag.embedding import EmbeddingService

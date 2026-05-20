@@ -1,10 +1,10 @@
-"""Feishu WS long-connection entrypoint.
-
-Wires the Agent to Feishu via lark-oapi:
-- 文本消息 → 运行 agent (Supervisor / Plan-Execute) → 回复文本
-- 若 agent 输出中含 "request_id=XXX"（来自 guarded_call_tool 危险拦截），
-  自动发交互卡片（按钮带 token），供运维人员人工放行
-- 卡片按钮 click → register_p2_card_action_trigger 回调 → ConfirmationStore 放行
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: feishu_ws.py
+@DateTime: 2026-05-20
+@Docs: Feishu WS bot — messages, agent replies, and confirm cards.
+    飞书 WS 长连接机器人：消息处理、Agent 回复与确认卡片。
 """
 
 from __future__ import annotations
@@ -66,8 +66,20 @@ def _select_agent(text: str) -> tuple[str, bool]:
 async def handle_question(text: str, agent: AgentFn) -> str:
     """Handle a Feishu message: strip, validate, delegate to agent.
 
-    Exception path：固定脱敏文案给用户，原始异常详情仅写日志，
-    避免 DSN/密钥/堆栈出现在用户视图（审查报告 feishu_ws:46-47）。
+    处理飞书消息：去空白、校验后委托 agent 回答。
+
+    On failure returns redacted text; full exception logged only server-side.
+    异常路径返回固定脱敏文案，详情仅写服务端日志。
+
+    Args:
+        text: Incoming message text.
+            入站消息文本。
+        agent: Async callable(question) -> answer.
+            异步 agent(question) -> answer。
+
+    Returns:
+        Agent answer or user-safe error message.
+            Agent 回答或对用户安全的错误提示。
     """
     text = text.strip()
     if not text:
@@ -180,7 +192,13 @@ def _on_card_action(trigger: P2CardActionTrigger) -> P2CardActionTriggerResponse
 
 
 def run() -> None:  # manual verification only, not unit tested
-    """Start Feishu WS long-connection bot. Requires OPSPILOT_FEISHU_APP_ID/SECRET."""
+    """Start Feishu WS long-connection bot.
+
+    启动飞书 WS 长连接机器人。
+
+    Requires OPSPILOT_FEISHU_APP_ID and OPSPILOT_FEISHU_APP_SECRET.
+    需要配置 OPSPILOT_FEISHU_APP_ID 与 OPSPILOT_FEISHU_APP_SECRET。
+    """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     settings = get_settings()
     client = _get_lark_client(settings.feishu_app_id, settings.feishu_app_secret)

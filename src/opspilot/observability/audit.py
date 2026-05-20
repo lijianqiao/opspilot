@@ -1,7 +1,10 @@
-"""Append-only operation audit log (JSONL).
-
-每条写/危险操作都落一行：谁、何时、什么工具、参数、是否确认、结果、可回滚信息。
-JSONL append 是进程内最简单的不可篡改近似；Stage 6 可换 Postgres append-only 表。
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: audit.py
+@DateTime: 2026-05-20
+@Docs: Append-only JSONL audit log for write and dangerous operations.
+    追加式 JSONL 操作审计日志（写操作与危险操作落盘，进程内线程安全）。
 """
 
 from __future__ import annotations
@@ -19,6 +22,14 @@ _lock = threading.Lock()
 
 
 def _default_path() -> str:
+    """Resolve audit log path from application settings.
+
+    从应用配置解析审计日志文件路径。
+
+    Returns:
+        Configured audit_log_path string.
+            配置项 audit_log_path 的路径字符串。
+    """
     from opspilot.config import get_settings
 
     return get_settings().audit_log_path
@@ -35,7 +46,31 @@ def record_operation(
     rollback: dict[str, Any] | None,
     path: str | None = None,
 ) -> None:
-    """Append one audit record. Never raises into the caller's hot path."""
+    """Append one audit record. Never raises into the caller's hot path.
+
+    追加一条审计记录；不向调用方热路径抛出异常。
+
+    Each line records who/when/tool/params/confirmation/result/rollback hints.
+    每行记录：操作者、时间、工具、参数、确认人、状态、结果与回滚信息。
+
+    Args:
+        tool: Tool name invoked.
+            调用的工具名称。
+        tool_input: Serialized tool input (truncated in storage if needed).
+            工具入参序列化字符串。
+        actor: Identity performing the operation.
+            执行操作的主体标识。
+        confirmed_by: Human confirmer id when applicable; else None.
+            人工确认者标识；无则为 None。
+        status: Outcome status label.
+            结果状态标签。
+        result: Human-readable result text (stored truncated).
+            人类可读的结果文本（写入时会截断）。
+        rollback: Optional rollback metadata dict.
+            可选的回滚元数据字典。
+        path: Override audit file path; defaults to settings.
+            覆盖审计文件路径；默认使用配置路径。
+    """
     record = {
         "ts": datetime.now(UTC).isoformat(),
         "tool": tool,

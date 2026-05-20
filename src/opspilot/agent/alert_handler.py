@@ -1,10 +1,10 @@
-"""Alert Handler Agent: receive Alertmanager webhook → diagnose → return report.
-
-Coordination pipeline:
-  1. Parse Alertmanager webhook payload
-  2. Call Log Analyzer to query logs for the affected service
-  3. Call retrieve_runbook for relevant troubleshooting steps
-  4. LLM synthesizes final diagnosis report
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: alert_handler.py
+@DateTime: 2026-05-20
+@Docs: Alert Handler: webhook ingest, diagnose, return report.
+    告警处理智能体：接收 Webhook、诊断并返回报告。
 """
 
 from __future__ import annotations
@@ -39,7 +39,21 @@ def _extract_context(payload: dict[str, Any]) -> dict[str, str]:
 
 
 async def handle_alert(payload: dict[str, Any], llm: SupportsChat) -> str:
-    """Main entry point: receive webhook → diagnose → return report."""
+    """Main entry: receive Alertmanager webhook, diagnose, return report.
+    主入口：接收 Alertmanager Webhook、综合诊断并返回报告。
+
+    Pipeline: parse alert → gather logs/runbook → LLM synthesis.
+
+    Args:
+        payload: Alertmanager webhook JSON body.
+            Alertmanager Webhook 的 JSON 请求体。
+        llm: Chat backend for diagnosis synthesis.
+            用于综合诊断的对话后端。
+
+    Returns:
+        Formatted diagnosis report string for operators.
+            面向运维人员的格式化诊断报告文本。
+    """
     ctx = _extract_context(payload)
     logger.info(
         "Alert received: %s/%s severity=%s",

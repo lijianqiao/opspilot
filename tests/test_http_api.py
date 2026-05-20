@@ -1,4 +1,11 @@
-"""Tests for the OpsPilot agent HTTP API."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_http_api.py
+@DateTime: 2026-05-20
+@Docs: Tests FastAPI /ask /alert /healthz with auth.
+    测试 FastAPI /ask /alert /healthz 与鉴权。
+"""
 
 from __future__ import annotations
 

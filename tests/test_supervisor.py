@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_supervisor.py
+@DateTime: 2026-05-20
+@Docs: Tests multi-agent supervisor routing.
+    测试多智能体 Supervisor 路由。
+"""
+
 import pytest
 
 from opspilot.agent.supervisor import run_supervisor

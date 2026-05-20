@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_log_tools.py
+@DateTime: 2026-05-20
+@Docs: Tests Loki/Prometheus mock log tools.
+    测试 Loki/Prometheus mock 日志工具。
+"""
+
 from opspilot.tools.log_tools import aggregate_errors, tail_pod_logs
 
 

@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_llm_client.py
+@DateTime: 2026-05-20
+@Docs: Tests LLMClient retry, timeouts, and circuit breaker.
+    测试 LLMClient 重试、超时与熔断。
+"""
+
 import httpx
 import pytest
 import respx

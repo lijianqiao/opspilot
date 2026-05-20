@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_ci_eval_summary.py
+@DateTime: 2026-05-20
+@Docs: Tests CI eval summary script output contract.
+    测试 CI 评估汇总脚本输出约定。
+"""
+
 import json
 from pathlib import Path
 

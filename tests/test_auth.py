@@ -1,4 +1,11 @@
-"""Tests for shared HTTP auth helpers."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_auth.py
+@DateTime: 2026-05-20
+@Docs: Tests HTTP Bearer auth and fail-closed behavior.
+    测试 HTTP Bearer 鉴权与 fail-closed。
+"""
 
 from __future__ import annotations
 

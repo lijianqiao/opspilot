@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_gateway_config.py
+@DateTime: 2026-05-20
+@Docs: Tests GatewaySettings and provider JSON parsing.
+    测试 GatewaySettings 与 provider JSON 解析。
+"""
+
 import pytest
 
 from opspilot.gateway.config import GatewayProvider, GatewaySettings

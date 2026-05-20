@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: test_alert_webhook.py
+@DateTime: 2026-05-20
+@Docs: Tests Alertmanager webhook HMAC and error sanitization.
+    测试 Alertmanager Webhook HMAC 与错误脱敏。
+"""
+
 import hashlib
 import hmac
 import json

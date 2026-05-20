@@ -1,3 +1,12 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: prepare_sft_dataset.py
+@DateTime: 2026-05-20
+@Docs: CLI: build SFT JSONL from eval trajectories/fixtures.
+    CLI：从 eval 轨迹/fixture 构建 SFT JSONL。
+"""
+
 from __future__ import annotations
 
 import argparse

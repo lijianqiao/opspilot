@@ -1,11 +1,13 @@
-"""Run RAGAS evaluation on the 30 QA pairs.
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: run_rag_eval.py
+@DateTime: 2026-05-20
+@Docs: CLI: run RAG retrieval quality eval (RAGAS).
+    CLI：运行 RAG 检索质量评估（RAGAS）。
 
-Requires Qdrant running with ingested runbook docs.
-Requires a real LLM for faithfulness + context_precision metrics.
-
-Usage:
-    uv run python scripts/run_rag_eval.py
-    uv run python scripts/run_rag_eval.py --qa fixtures/rag_eval_qa.json
+Evaluates retrieval quality on the bundled QA pairs.
+在内置 QA 对上评估检索质量。
 """
 
 from __future__ import annotations

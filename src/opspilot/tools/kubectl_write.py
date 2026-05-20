@@ -1,4 +1,11 @@
-"""Mock kubectl WRITE tools — high risk, guarded by the guardrail layer."""
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: kubectl_write.py
+@DateTime: 2026-05-20
+@Docs: Mock high-risk kubectl write tools and rollback metadata helper.
+    模拟高风险 kubectl 写操作工具及回滚元数据辅助函数。
+"""
 
 from __future__ import annotations
 
@@ -17,7 +24,21 @@ def _load_deployments() -> list[dict[str, object]]:
 
 @register_tool(risk="high")
 def kubectl_scale(deployment: str, replicas: int, namespace: str = "default") -> str:
-    """伸缩 deployment 副本数（写操作，高危）。"""
+    """Scale a deployment replica count (high-risk write).
+    伸缩 deployment 副本数（写操作，高危）。
+
+    Args:
+        deployment: Deployment name.
+            Deployment 名称。
+        replicas: Target replica count.
+            目标副本数。
+        namespace: Deployment namespace.
+            Deployment 命名空间。
+
+    Returns:
+        Mock scale result or not-found message.
+            模拟扩缩容结果或未找到提示。
+    """
     for d in _load_deployments():
         if d["name"] == deployment and d["namespace"] == namespace:
             return f"deployment.apps/{deployment} scaled: {d['replicas']} -> {replicas} (namespace={namespace})"
@@ -26,7 +47,19 @@ def kubectl_scale(deployment: str, replicas: int, namespace: str = "default") ->
 
 @register_tool(risk="high")
 def kubectl_rollout_restart(deployment: str, namespace: str = "default") -> str:
-    """滚动重启 deployment（写操作，高危）。"""
+    """Rolling restart a deployment (high-risk write).
+    滚动重启 deployment（写操作，高危）。
+
+    Args:
+        deployment: Deployment name.
+            Deployment 名称。
+        namespace: Deployment namespace.
+            Deployment 命名空间。
+
+    Returns:
+        Mock restart acknowledgment or not-found message.
+            模拟重启确认或未找到提示。
+    """
     for d in _load_deployments():
         if d["name"] == deployment and d["namespace"] == namespace:
             return f"deployment.apps/{deployment} 已触发滚动重启 (namespace={namespace})"
@@ -34,10 +67,18 @@ def kubectl_rollout_restart(deployment: str, namespace: str = "default") -> str:
 
 
 def rollback_info_for(tool_name: str, raw_input: str) -> dict[str, object] | None:
-    """给定将要执行的写操作，返回回滚所需的前置状态（不产生副作用）。
+    """Return pre-state snapshot for rollback without side effects.
+    给定将要执行的写操作，返回回滚所需的前置状态（不产生副作用）。
 
-    kubectl_scale -> 记录当前副本数；rollout_restart -> 记录当前 revision 占位。
-    解析失败 / 未知部署返回 None（审计仍会记录原始 input）。
+    Args:
+        tool_name: kubectl_scale or kubectl_rollout_restart.
+            工具名：kubectl_scale 或 kubectl_rollout_restart。
+        raw_input: JSON Action Input with deployment/namespace fields.
+            含 deployment/namespace 等字段的 JSON Action Input。
+
+    Returns:
+        Rollback dict (replicas or revision) or None if parse/lookup fails.
+            回滚字典（副本数或 revision），解析或查找失败时为 None。
     """
     try:
         args = json.loads(raw_input)

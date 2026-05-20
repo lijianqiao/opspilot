@@ -1,9 +1,10 @@
-"""FastAPI application exposing the OpsPilot agent via HTTP.
-
-Endpoints:
-  GET  /healthz  - Liveness/readiness check
-  POST /ask      - Natural-language question, returns agent answer
-  POST /alert    - Alertmanager webhook, returns diagnosis
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: http_api.py
+@DateTime: 2026-05-20
+@Docs: FastAPI app exposing agent /ask, /alert, health, and metrics.
+    FastAPI 应用：暴露 /ask、/alert、健康检查与指标端点。
 """
 
 from __future__ import annotations
@@ -24,14 +25,28 @@ AgentFn = Callable[[str], Awaitable[str]]
 
 
 class AskRequest(BaseModel):
+    """Request body for POST /ask.
+
+    POST /ask 请求体。
+    """
+
     question: str
 
 
 class AskResponse(BaseModel):
+    """Response body for POST /ask.
+
+    POST /ask 响应体。
+    """
+
     answer: str
 
 
 async def _default_agent(question: str) -> str:
+    """Default agent implementation using Supervisor.
+
+    默认 Agent 实现：通过 Supervisor 处理问题。
+    """
     settings = get_settings()
     llm = LLMClient(settings)
     try:
@@ -41,6 +56,28 @@ async def _default_agent(question: str) -> str:
 
 
 def create_app(agent: AgentFn | None = None) -> FastAPI:
+    """Create the OpsPilot FastAPI application.
+
+    创建 OpsPilot FastAPI 应用实例。
+
+    Endpoints:
+        GET /healthz — liveness check.
+            存活探针。
+        GET /metrics — Prometheus metrics.
+            Prometheus 指标。
+        POST /ask — natural-language question (Bearer auth).
+            自然语言提问（需 Bearer 鉴权）。
+        POST /alert — Alertmanager webhook payload (Bearer auth).
+            Alertmanager 告警载荷（需 Bearer 鉴权）。
+
+    Args:
+        agent: Optional async callable(question) -> answer; defaults to Supervisor.
+            可选的异步 agent(question) -> answer；默认使用 Supervisor。
+
+    Returns:
+        Configured FastAPI app.
+            配置完成的 FastAPI 应用。
+    """
     agent_fn = agent or _default_agent
     app = FastAPI(title="OpsPilot Agent Core")
 
