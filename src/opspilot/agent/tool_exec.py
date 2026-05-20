@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import opspilot.tools  # noqa: F401 - register built-in tools before execution
@@ -18,6 +19,8 @@ from opspilot.observability.audit import record_operation
 from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.kubectl_write import rollback_info_for
 from opspilot.tools.registry import call_tool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -103,28 +106,69 @@ def guarded_call_tool(
         )
 
     if is_dangerous(tool_name, raw_input):
-        # 已有人工确认 → 放行执行
-        if confirmed_request_id is not None and (
-            confirmer := store.consume_if_matches(
+        # 已有人工确认 → 先只读校验 → 写 approved 审计（fail-closed）→ 消费 → 执行
+        if confirmed_request_id is not None:
+            confirmer = store.confirmed_actor_if_matches(
                 confirmed_request_id,
                 tool_name,
                 raw_input,
                 context=confirmation_context,
             )
-        ):
-            rollback = rollback_info_for(tool_name, raw_input)
-            observation = redact(call_tool(tool_name, raw_input))
-            record_operation(
-                tool=tool_name,
-                tool_input=raw_input,
-                actor=actor,
-                confirmed_by=confirmer,
-                status="executed",
-                result=observation,
-                rollback=rollback,
-                path=audit_path,
-            )
-            return GuardedResult(observation=observation, blocked=False)
+            if confirmer is not None:
+                rollback = rollback_info_for(tool_name, raw_input)
+                # STEP A: approved-status audit must be persisted before we
+                # consume the confirmation token. If the audit write fails we
+                # abort the operation and leave the confirmation intact so
+                # the operator can retry without re-issuing a new approval.
+                # Catch broadly (Exception) on purpose: any backend failure
+                # — including non-OSError surprises from mocked/monkey-patched
+                # record_operation in tests — must trigger fail-closed.
+                try:
+                    record_operation(
+                        tool=tool_name,
+                        tool_input=raw_input,
+                        actor=actor,
+                        confirmed_by=confirmer,
+                        status="approved",
+                        result="approved for execution",
+                        rollback=rollback,
+                        path=audit_path,
+                        fail_closed=True,
+                    )
+                except Exception:
+                    logger.exception("approved-audit write failed; high-risk op aborted")
+                    return GuardedResult(
+                        observation=("Audit log is unavailable; high-risk operation was not executed."),
+                        blocked=True,
+                    )
+                # STEP B: consume only after the approved audit is safely on disk.
+                consume_actor = store.consume_if_matches(
+                    confirmed_request_id,
+                    tool_name,
+                    raw_input,
+                    context=confirmation_context,
+                )
+                if consume_actor is None:
+                    # Race: another caller consumed between our check and our consume.
+                    return GuardedResult(
+                        observation=(
+                            "Confirmation expired or was already consumed; high-risk operation was not executed."
+                        ),
+                        blocked=True,
+                    )
+                # STEP C: execute + executed-audit (best-effort; op already ran).
+                observation = redact(call_tool(tool_name, raw_input))
+                record_operation(
+                    tool=tool_name,
+                    tool_input=raw_input,
+                    actor=actor,
+                    confirmed_by=consume_actor,
+                    status="executed",
+                    result=observation,
+                    rollback=rollback,
+                    path=audit_path,
+                )
+                return GuardedResult(observation=observation, blocked=False)
 
         # 无确认 → 登记 pending，拦截
         record_guardrail_block(tool_name)

@@ -272,3 +272,38 @@ def test_observation_redacted(tmp_path) -> None:
         audit_path=str(tmp_path / "a.jsonl"),
     )
     assert "sk-DEADBEEF999999" not in r.observation
+
+
+def test_confirmed_high_risk_tool_does_not_execute_when_audit_fails(monkeypatch, tmp_path) -> None:
+    """
+    When approved-audit write fails, the high-risk op must NOT run and the
+    confirmation must remain intact so the operator can retry.
+
+    验证：approved 审计写失败时高危操作不执行，且确认未被消费，可直接重试。
+    """
+    import opspilot.tools.service_actions  # noqa: F401 - ensure restart_service registered
+
+    store = ConfirmationStore(300)
+    raw = '{"service":"user-service","env":"staging"}'
+    pc = store.request("restart_service", raw)
+    assert store.confirm(pc.request_id, pc.token, actor="feishu:ou_42") is True
+
+    def boom(**_kwargs) -> bool:
+        raise RuntimeError("audit down")
+
+    monkeypatch.setattr("opspilot.agent.tool_exec.record_operation", boom)
+
+    result = guarded_call_tool(
+        "restart_service",
+        raw,
+        calls=1,
+        max_calls=8,
+        store=store,
+        confirmed_request_id=pc.request_id,
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+
+    assert result.blocked is True
+    assert "audit" in result.observation.lower()
+    # Confirmation must survive so the operator can retry without re-issuing a card.
+    assert store.is_confirmed(pc.request_id) is True

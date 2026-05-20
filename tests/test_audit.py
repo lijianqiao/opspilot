@@ -9,6 +9,8 @@
 
 import json
 
+import pytest
+
 
 def test_record_operation_appends_jsonl(tmp_path) -> None:
     """
@@ -148,3 +150,77 @@ def test_record_operation_trace_id_none_when_unset(tmp_path) -> None:
     rec = json.loads(log.read_text(encoding="utf-8").strip())
     assert "trace_id" in rec
     assert rec["trace_id"] is None
+
+
+def test_record_operation_returns_true_on_success(tmp_path) -> None:
+    """
+    record_operation returns True when the append succeeds.
+
+    验证：成功写入时 record_operation 返回 True。
+    """
+    from opspilot.observability.audit import record_operation
+
+    log = tmp_path / "audit.jsonl"
+    ok = record_operation(
+        tool="kubectl_get",
+        tool_input="pods",
+        actor="agent",
+        confirmed_by=None,
+        status="executed",
+        result="ok",
+        rollback=None,
+        path=str(log),
+    )
+    assert ok is True
+
+
+def test_record_operation_returns_false_when_best_effort_write_fails(tmp_path) -> None:
+    """
+    record_operation returns False on OSError when fail_closed is omitted.
+
+    验证：默认模式下写失败（OSError）应返回 False 且不抛异常。
+    """
+    from opspilot.observability.audit import record_operation
+
+    # Use a directory path as the audit "file" — open(..., "a") raises
+    # IsADirectoryError (an OSError) on POSIX, PermissionError on Windows.
+    # Both inherit from OSError and trigger the same branch.
+    bad = tmp_path / "dir"
+    bad.mkdir()
+
+    ok = record_operation(
+        tool="kubectl_get",
+        tool_input="pods",
+        actor="agent",
+        confirmed_by=None,
+        status="executed",
+        result="ok",
+        rollback=None,
+        path=str(bad),
+    )
+    assert ok is False
+
+
+def test_record_operation_raises_when_fail_closed_and_write_fails(tmp_path) -> None:
+    """
+    record_operation raises AuditWriteError when fail_closed=True and write fails.
+
+    验证：fail_closed=True 时写失败应抛 AuditWriteError。
+    """
+    from opspilot.observability.audit import AuditWriteError, record_operation
+
+    bad = tmp_path / "dir"
+    bad.mkdir()
+
+    with pytest.raises(AuditWriteError):
+        record_operation(
+            tool="kubectl_get",
+            tool_input="pods",
+            actor="agent",
+            confirmed_by=None,
+            status="approved",
+            result="approved for execution",
+            rollback=None,
+            path=str(bad),
+            fail_closed=True,
+        )

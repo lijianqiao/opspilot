@@ -24,6 +24,13 @@ _lock = threading.Lock()
 _MAX_FIELD_CHARS = 2000
 
 
+class AuditWriteError(RuntimeError):
+    """Raised when an audit log write fails and the caller opted into fail-closed.
+
+    审计日志写入失败时抛出（仅在调用方选择 fail-closed 时抛出）。
+    """
+
+
 def _default_path() -> str:
     """Resolve audit log path from application settings.
 
@@ -65,10 +72,11 @@ def record_operation(
     result: str,
     rollback: dict[str, Any] | None,
     path: str | None = None,
-) -> None:
-    """Append one audit record. Never raises into the caller's hot path.
+    fail_closed: bool = False,
+) -> bool:
+    """Append one audit record; report success and optionally fail closed.
 
-    追加一条审计记录；不向调用方热路径抛出异常。
+    追加一条审计记录；返回写入是否成功，可选 fail-closed 抛错。
 
     Args:
 
@@ -90,6 +98,18 @@ def record_operation(
             可选的回滚元数据字典。
         path: Override audit file path; defaults to settings.
             覆盖审计文件路径；默认使用配置路径。
+        fail_closed: When True, raise AuditWriteError on write failure;
+            when False (default), only log and return False.
+            为 True 时写失败抛 AuditWriteError；默认 False 仅记录日志并返回 False。
+
+    Returns:
+        True if the record was successfully appended; False if write failed
+        and fail_closed is False.
+            成功写入返回 True；写失败且非 fail_closed 时返回 False。
+
+    Raises:
+        AuditWriteError: When write fails and fail_closed is True.
+            当 fail_closed 为 True 且写入失败时抛出。
     """
     record = {
         "ts": datetime.now(UTC).isoformat(),
@@ -108,5 +128,9 @@ def record_operation(
         line = json.dumps(record, ensure_ascii=False)
         with _lock, open(target, "a", encoding="utf-8") as f:
             f.write(line + "\n")
-    except OSError:
+        return True
+    except OSError as exc:
         logger.exception("audit write failed (operation still proceeds): %s/%s", tool, status)
+        if fail_closed:
+            raise AuditWriteError(f"audit write failed for {tool}/{status}") from exc
+        return False

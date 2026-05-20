@@ -228,6 +228,49 @@ class ConfirmationStore:
             self._pending.pop(request_id, None)
             return actor
 
+    def confirmed_actor_if_matches(
+        self,
+        request_id: str,
+        tool: str,
+        tool_input: str,
+        context: ConfirmationContext | None = None,
+    ) -> str | None:
+        """Return confirming actor if pending matches, without consuming state.
+
+        在不消费状态的前提下，校验待确认记录是否匹配并返回确认人。
+
+        Args:
+            request_id: Pending request id.
+                待确认请求 ID。
+            tool: Tool name.
+                工具名称。
+            tool_input: Raw tool input.
+                工具输入原文。
+            context: Optional context of the current call site; must match the
+                context recorded on the pending request.
+                可选当前调用方上下文；必须与待确认记录上下文匹配。
+
+        Returns:
+            Confirming actor string if pending exists, is unexpired, matches
+            the tool/input/context, and was already confirmed; otherwise None.
+            **Does not consume or remove any state.**
+                当待确认记录存在、未过期、与工具/入参/上下文匹配且已被确认时
+                返回确认人；否则返回 None。**此方法不消费、不移除任何状态。**
+        """
+        with self._lock:
+            pc = self._pending.get(request_id)
+            if pc is None:
+                return None
+            if time.monotonic() > pc.expires_at:
+                self._pending.pop(request_id, None)
+                self._confirmed_by.pop(request_id, None)
+                return None
+            if pc.tool != tool or pc.tool_input != tool_input:
+                return None
+            if not _context_matches(pc.context, context):
+                return None
+            return self._confirmed_by.get(request_id)
+
     def consume_if_matches(
         self,
         request_id: str,
