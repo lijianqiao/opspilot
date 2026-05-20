@@ -16,6 +16,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.guardrails import redact
+from opspilot.alerts.adapters import normalize_alert_payload
 from opspilot.config import get_settings
 from opspilot.entrypoints.auth import verify_alertmanager_signature
 from opspilot.entrypoints.body_limits import (
@@ -68,15 +69,20 @@ async def receive_alert(request: Request, x_opspilot_signature: str = Header(def
     verify_alertmanager_signature(raw_body, x_opspilot_signature)
 
     try:
-        payload = require_alertmanager_payload(require_json_object(json.loads(raw_body)))
+        payload = require_json_object(json.loads(raw_body))
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="invalid json") from exc
-    logger.info("Alert webhook received: %s alert(s)", len(payload.get("alerts", [])))
+    source = request.headers.get("x-opspilot-alert-source") or payload.get("source") or "alertmanager"
+    source_str = str(source)
+    if source_str.strip().lower() == "alertmanager":
+        payload = require_alertmanager_payload(payload)
+    event = normalize_alert_payload(payload, source=source_str)
+    logger.info("Alert webhook received: source=%s alerts=%d", event.source, len(event.alerts))
 
     settings = get_settings()
     llm = LLMClient(settings, breaker=_LLM_BREAKER)
     try:
-        report = await handle_alert(payload, llm)
+        report = await handle_alert(event, llm)
         return {"status": "ok", "diagnosis": report}
     except Exception:
         logger.exception("Alert handling failed")

@@ -18,6 +18,7 @@ from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.confirmation import STORE
 from opspilot.agent.plan_execute import run_plan_execute
 from opspilot.agent.supervisor import run_supervisor
+from opspilot.alerts.adapters import normalize_alert_payload
 from opspilot.config import get_settings
 from opspilot.entrypoints.agent_api_models import (
     AskRequest,
@@ -183,13 +184,16 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             Dict with status and diagnosis fields.
                 含 status 与 diagnosis 字段的字典。
         """
-        payload = require_alertmanager_payload(
-            require_json_object(await read_limited_json(request, MAX_ALERT_BODY_BYTES))
-        )
+        payload = require_json_object(await read_limited_json(request, MAX_ALERT_BODY_BYTES))
+        source = request.headers.get("x-opspilot-alert-source") or payload.get("source") or "alertmanager"
+        source_str = str(source)
+        if source_str.strip().lower() == "alertmanager":
+            payload = require_alertmanager_payload(payload)
+        event = normalize_alert_payload(payload, source=source_str)
         settings = get_settings()
         llm = LLMClient(settings, breaker=_LLM_BREAKER)
         try:
-            diagnosis = await handle_alert(payload, llm)
+            diagnosis = await handle_alert(event, llm)
             return {"status": "ok", "diagnosis": diagnosis}
         finally:
             await llm.aclose()

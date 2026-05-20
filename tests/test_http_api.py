@@ -237,6 +237,44 @@ async def test_alert_rejects_malformed_alerts_field(auth_token: str) -> None:
 
 
 @pytest.mark.anyio
+async def test_alert_normalizes_grafana_payload(monkeypatch: pytest.MonkeyPatch, auth_token: str) -> None:
+    """
+    Verify /alert routes Grafana payloads through the normalizer.
+
+    验证：/alert 能识别 Grafana 载荷并归一化后再交给 handle_alert。
+    """
+    from opspilot.alerts.models import NormalizedAlertEvent
+
+    captured: dict[str, NormalizedAlertEvent | None] = {"event": None}
+
+    async def fake_handle(event, llm):  # type: ignore[no-untyped-def]
+        captured["event"] = event
+        return "grafana ok"
+
+    monkeypatch.setattr("opspilot.entrypoints.http_api.handle_alert", fake_handle)
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/alert",
+            json={
+                "title": "High memory",
+                "state": "alerting",
+                "ruleName": "MemoryHigh",
+                "tags": {"service": "payment", "env": "prod"},
+                "message": "memory over threshold",
+            },
+            headers={**_bearer(auth_token), "X-OpsPilot-Alert-Source": "grafana"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["diagnosis"] == "grafana ok"
+    event = captured["event"]
+    assert event is not None
+    assert event.source == "grafana"
+    assert event.alerts[0].service == "payment"
+
+
+@pytest.mark.anyio
 async def test_ask_fail_closed_when_token_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Verify ask fail closed when token unconfigured.

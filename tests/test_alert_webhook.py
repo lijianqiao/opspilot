@@ -178,6 +178,50 @@ def test_alert_fail_closed_when_secret_unconfigured(client: TestClient, monkeypa
         get_settings.cache_clear()
 
 
+def test_alert_normalizes_zabbix_payload(
+    client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Verify Zabbix-sourced webhooks bypass alertmanager validation and normalize correctly.
+
+    验证：Zabbix 来源的载荷跳过 alertmanager 校验，并按 zabbix 适配器归一化。
+    """
+    from opspilot.alerts.models import NormalizedAlertEvent
+
+    captured: dict[str, NormalizedAlertEvent | None] = {"event": None}
+
+    async def fake_handle(event, llm):  # type: ignore[no-untyped-def]
+        captured["event"] = event
+        return "zabbix ok"
+
+    monkeypatch.setattr("opspilot.entrypoints.alert_webhook.handle_alert", fake_handle)
+    body = json.dumps(
+        {
+            "trigger": "CPU high",
+            "host": "api-01",
+            "severity": "High",
+            "service": "api",
+            "env": "prod",
+        }
+    ).encode("utf-8")
+    response = client.post(
+        "/alert",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Opspilot-Signature": _sign(body, hmac_secret),
+            "X-OpsPilot-Alert-Source": "zabbix",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["diagnosis"] == "zabbix ok"
+    event = captured["event"]
+    assert event is not None
+    assert event.source == "zabbix"
+    assert event.alerts[0].source_entity == "api-01"
+    assert event.alerts[0].severity == "high"
+
+
 def test_alert_handles_error_with_redaction(
     client: TestClient, hmac_secret: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

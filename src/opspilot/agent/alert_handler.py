@@ -13,40 +13,51 @@ import logging
 from typing import Any
 
 from opspilot.agent.protocols import SupportsChat
+from opspilot.alerts.adapters import normalize_alert_payload
+from opspilot.alerts.models import NormalizedAlertEvent
 from opspilot.tools.log_tools import aggregate_errors
 from opspilot.tools.runbook import retrieve_runbook
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_context(payload: dict[str, Any]) -> dict[str, str]:
-    """Extract key fields from an Alertmanager webhook payload."""
-    alerts = payload.get("alerts", [])
-    if not alerts:
-        return {"service": "unknown", "namespace": "default", "alertname": "unknown"}
+def _coerce_event(payload: NormalizedAlertEvent | dict[str, Any]) -> NormalizedAlertEvent:
+    """Accept either a NormalizedAlertEvent or a raw dict for backwards compatibility.
 
-    alert = alerts[0]
-    labels = alert.get("labels", {})
-    annotations = alert.get("annotations", {})
+    兼容旧调用方：dict 通过适配器归一化，NormalizedAlertEvent 直接返回。
+    """
+    if isinstance(payload, NormalizedAlertEvent):
+        return payload
+    source = str(payload.get("source") or "alertmanager")
+    return normalize_alert_payload(payload, source=source)
+
+
+def _extract_context(payload: NormalizedAlertEvent | dict[str, Any]) -> dict[str, str]:
+    """Extract key fields from a normalized alert event (or legacy Alertmanager dict).
+
+    从归一化告警事件（或旧版 Alertmanager dict）中提取关键字段。
+    """
+    event = _coerce_event(payload)
+    alert = event.alerts[0]
     return {
-        "service": labels.get("service", "unknown"),
-        "namespace": labels.get("namespace", "default"),
-        "alertname": labels.get("alertname", "unknown"),
-        "severity": labels.get("severity", "warning"),
-        "summary": annotations.get("summary", ""),
-        "description": annotations.get("description", ""),
+        "service": alert.service,
+        "namespace": alert.environment,
+        "alertname": alert.alertname,
+        "severity": alert.severity,
+        "summary": alert.summary,
+        "description": alert.description,
     }
 
 
-async def handle_alert(payload: dict[str, Any], llm: SupportsChat) -> str:
-    """Main entry: receive Alertmanager webhook, diagnose, return report.
-    主入口：接收 Alertmanager Webhook、综合诊断并返回报告。
+async def handle_alert(payload: NormalizedAlertEvent | dict[str, Any], llm: SupportsChat) -> str:
+    """Main entry: receive normalized (or raw) alert event, diagnose, return report.
+    主入口：接收归一化（或原始）告警事件、综合诊断并返回报告。
 
     Pipeline: parse alert → gather logs/runbook → LLM synthesis.
 
     Args:
-        payload: Alertmanager webhook JSON body.
-            Alertmanager Webhook 的 JSON 请求体。
+        payload: NormalizedAlertEvent or raw Alertmanager-shaped dict.
+            归一化告警事件，或与 Alertmanager 兼容的原始 dict。
         llm: Chat backend for diagnosis synthesis.
             用于综合诊断的对话后端。
 
