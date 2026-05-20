@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.supervisor import run_supervisor
 from opspilot.config import get_settings
+from opspilot.entrypoints.auth import require_bearer
 from opspilot.llm.client import LLMClient
 from opspilot.observability.metrics import record_agent_request, render_metrics
 
@@ -51,7 +52,7 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
     async def metrics() -> Response:
         return Response(content=render_metrics(), media_type="text/plain; version=0.0.4")
 
-    @app.post("/ask", response_model=AskResponse)
+    @app.post("/ask", response_model=AskResponse, dependencies=[Depends(require_bearer)])
     async def ask(request: AskRequest) -> AskResponse:
         question = request.question.strip()
         if not question:
@@ -64,7 +65,7 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
         record_agent_request(endpoint="/ask", status="success")
         return AskResponse(answer=answer)
 
-    @app.post("/alert")
+    @app.post("/alert", dependencies=[Depends(require_bearer)])
     async def alert(payload: dict) -> dict[str, str]:
         settings = get_settings()
         llm = LLMClient(settings)
