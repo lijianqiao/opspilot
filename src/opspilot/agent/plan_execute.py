@@ -14,23 +14,14 @@ from typing import Annotated, Any
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.agent.protocols import SupportsChat
-from opspilot.agent.react_protocol import (
-    ACTION_INPUT_RE as _ACTION_INPUT_RE,
-)
-from opspilot.agent.react_protocol import (
-    ACTION_RE as _ACTION_RE,
-)
-from opspilot.agent.react_protocol import (
-    FINAL_RE as _FINAL_RE,
-)
 from opspilot.agent.react_protocol import (
     STEP_RE as _STEP_RE,
 )
+from opspilot.agent.react_protocol import parse_react_output
+from opspilot.agent.tool_exec import guarded_call_tool
 from opspilot.config import get_settings
-from opspilot.observability.metrics import record_guardrail_block
-from opspilot.tools.registry import build_tools_prompt, call_tool
+from opspilot.tools.registry import build_tools_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -99,22 +90,19 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
         ]
     )
     logger.info("Executor reply (step %d): %s", state["cursor"], reply[:300])
+    parsed = parse_react_output(reply)
     calls = state["tool_calls"]
-    if (action := _ACTION_RE.search(reply)) is not None:
+    if parsed.action is not None:
         calls += 1
-        arg = _ACTION_INPUT_RE.search(reply)
-        raw = arg.group(1).strip() if arg else ""
-        tool_name = action.group(1)
-        if calls > get_settings().agent_max_tool_calls:
-            obs = "工具调用次数已达上限。"
-        elif is_dangerous(tool_name, raw):
-            record_guardrail_block(tool_name)
-            obs = f"危险操作被拦截，需人工确认：{tool_name} {raw}（confirm_dangerous_op token=CONFIRM 放行）"
-        else:
-            obs = redact(call_tool(tool_name, raw))
-        result = obs
-    elif (final := _FINAL_RE.search(reply)) is not None:
-        result = final.group(1).strip()
+        guarded = guarded_call_tool(
+            parsed.action,
+            parsed.action_input,
+            calls=calls,
+            max_calls=get_settings().agent_max_tool_calls,
+        )
+        result = guarded.observation
+    elif parsed.final is not None:
+        result = parsed.final
     else:
         result = reply.strip()
     return {
