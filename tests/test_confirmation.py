@@ -45,3 +45,18 @@ def test_expired_request_rejected() -> None:
     time.sleep(0.05)
     assert store.confirm(pc.request_id, pc.token, actor="x") is False
     assert store.is_confirmed(pc.request_id) is False
+
+
+def test_get_pending_returns_record_without_consuming() -> None:
+    # 飞书 entrypoint 收到 guarded_call_tool 返回的 request_id 后，需要
+    # 取出 token + tool + input 构造确认卡片；只读，不消费、不放行。
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request("kubectl_scale", "x")
+    fetched = store.get_pending(pc.request_id)
+    assert fetched is not None
+    assert fetched.token == pc.token
+    assert fetched.tool == "kubectl_scale"
+    # 仍 pending，未确认
+    assert store.is_confirmed(pc.request_id) is False
+    # 未知 request_id 返回 None
+    assert store.get_pending("nope") is None

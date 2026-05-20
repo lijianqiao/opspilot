@@ -60,6 +60,21 @@ class ConfirmationStore:
         with self._lock:
             return request_id in self._confirmed_by
 
+    def get_pending(self, request_id: str) -> PendingConfirmation | None:
+        """Read-only lookup: 飞书 entrypoint 拿 request_id 取 token+tool+input 构造卡片用。
+
+        不放行、不消费；过期返回 None 并 GC。
+        """
+        with self._lock:
+            pc = self._pending.get(request_id)
+            if pc is None:
+                return None
+            if time.monotonic() > pc.expires_at:
+                self._pending.pop(request_id, None)
+                self._confirmed_by.pop(request_id, None)
+                return None
+            return pc
+
     def consume(self, request_id: str) -> str | None:
         """放行并失效（一次性）。返回确认人 actor，未确认返回 None。"""
         with self._lock:
