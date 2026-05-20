@@ -47,6 +47,10 @@ class Settings(BaseSettings):
             Alertmanager Webhook HMAC 密钥。
         agent_core_url: Base URL for channel adapters to call agent-core HTTP API.
             渠道适配器调用 agent-core 的 HTTP 基址。
+        use_mock_tools: When True, kubectl/Prometheus/Loki tools read fixtures/.
+            为 True 时工具从 fixtures/ 读模拟数据（Docker 联调推荐）。
+        fixtures_dir: Override fixtures directory (empty = auto-detect).
+            覆盖 fixtures 目录路径（空则自动探测项目根 fixtures/）。
     """
 
     model_config = SettingsConfigDict(env_prefix="OPSPILOT_", env_file=".env", extra="ignore")
@@ -67,6 +71,8 @@ class Settings(BaseSettings):
     api_auth_token: str = Field(default="", repr=False)  # 为空表示未配置鉴权（端点 fail-closed）
     alertmanager_hmac_secret: str = Field(default="", repr=False)
     agent_core_url: str = "http://localhost:8000"
+    use_mock_tools: bool = True
+    fixtures_dir: str = ""
 
 
 @lru_cache(maxsize=1)

@@ -44,6 +44,8 @@ def test_load_runbooks_concurrent_is_idempotent() -> None:
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda _: _load_runbooks(), range(32)))
     assert all(r is results[0] for r in results)
-    fixture_count = len(list(runbook_mod._FIXTURES_DIR.glob("runbook_*.json")))
+    from opspilot.tools.fixtures_path import get_fixtures_dir
+
+    fixture_count = len(list(get_fixtures_dir().glob("runbook_*.json")))
     assert len(results[0]) == fixture_count
     assert len(runbook_mod._RUNBOOKS) == fixture_count

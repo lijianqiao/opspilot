@@ -9,12 +9,8 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
+from opspilot.tools.fixtures_path import read_fixture_json, use_mock_tools
 from opspilot.tools.registry import register_tool
-
-_FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
 @register_tool
@@ -30,7 +26,10 @@ def query_prometheus(metric_name: str) -> str:
         Formatted metric values per pod/namespace, or not-found message.
             按 pod/namespace 格式化的指标值，未找到时返回提示。
     """
-    raw = json.loads((_FIXTURES_DIR / "prometheus_metrics.json").read_text(encoding="utf-8"))
+    if not use_mock_tools():
+        return "真实集群模式下 query_prometheus 尚未实现，请设置 OPSPILOT_USE_MOCK_TOOLS=true 或接入 Prometheus API。"
+    raw = read_fixture_json("prometheus_metrics.json")
+    assert isinstance(raw, dict)
     for metric in raw["metrics"]:
         if metric["name"] == metric_name:
             lines = [f"Metric: {metric_name}"]

@@ -7,12 +7,8 @@
     模拟 Pod 状态查询工具，从 fixture 读取数据。
 """
 
-import json
-from pathlib import Path
-
+from opspilot.tools.fixtures_path import kubectl_get_pods_real, read_fixture_json, use_mock_tools
 from opspilot.tools.registry import register_tool
-
-FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
 @register_tool
@@ -28,8 +24,11 @@ def get_pod_status(namespace: str = "default") -> str:
         Tabular pod listing or message when none found.
             Pod 列表表格文本，无 Pod 时返回提示信息。
     """
-    raw = (FIXTURES_DIR / "kubectl_pods.json").read_text(encoding="utf-8")
-    pods = [p for p in json.loads(raw)["pods"] if p["namespace"] == namespace]
+    if not use_mock_tools():
+        return kubectl_get_pods_real(namespace)
+    raw = read_fixture_json("kubectl_pods.json")
+    assert isinstance(raw, dict)
+    pods = [p for p in raw["pods"] if p["namespace"] == namespace]
     if not pods:
         return f"namespace {namespace} 下没有找到 pod。"
     lines = ["NAME\tREADY\tSTATUS\tRESTARTS"]

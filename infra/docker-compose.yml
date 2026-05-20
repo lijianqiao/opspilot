@@ -39,6 +39,10 @@ services:
       OPSPILOT_LLM_API_KEY: ${OPSPILOT_LLM_API_KEY:-sk-local}
       # 容器网络内主机名 postgres；与 POSTGRES_* 凭据同源，避免与 compose 硬编码两套密码
       OPSPILOT_PG_DSN: postgresql://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot}@postgres:5432/${POSTGRES_DB:-opspilot}
+      OPSPILOT_USE_MOCK_TOOLS: ${OPSPILOT_USE_MOCK_TOOLS:-true}
+      OPSPILOT_FIXTURES_DIR: /app/fixtures
+    volumes:
+      - ../fixtures:/app/fixtures:ro
     ports:
       - "8000:8000"
     depends_on:

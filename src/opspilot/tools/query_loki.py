@@ -9,12 +9,8 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
+from opspilot.tools.fixtures_path import read_fixture_json, use_mock_tools
 from opspilot.tools.registry import register_tool
-
-_FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
 @register_tool
@@ -34,7 +30,10 @@ def query_loki(query: str, namespace: str = "default", limit: int = 100) -> str:
         Matching log lines or not-found message.
             匹配的日志行文本，无匹配时返回提示。
     """
-    raw = json.loads((_FIXTURES_DIR / "loki_logs.json").read_text(encoding="utf-8"))
+    if not use_mock_tools():
+        return "真实集群模式下 query_loki 尚未实现，请设置 OPSPILOT_USE_MOCK_TOOLS=true 或接入 Loki API。"
+    raw = read_fixture_json("loki_logs.json")
+    assert isinstance(raw, dict)
     results: list[str] = []
     for stream in raw["streams"]:
         ns = stream["stream"].get("namespace", "")

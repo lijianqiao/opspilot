@@ -12,18 +12,16 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from opspilot.rag.retrieval import FALLBACK_RUNBOOK_TEXT
+from opspilot.tools.fixtures_path import get_fixtures_dir
 from opspilot.tools.registry import register_tool
 
 if TYPE_CHECKING:
     from opspilot.rag.retrieval import RetrievalService
 
 logger = logging.getLogger(__name__)
-
-_FIXTURES_DIR = Path(__file__).parent.parent.parent.parent / "fixtures"
 
 # ---------------------------------------------------------------------------
 # Stub fallback (original Stage 3 keyword-match) — used when Qdrant is down
@@ -46,7 +44,7 @@ def _load_runbooks() -> list[dict[str, object]]:
         if _RUNBOOKS:
             return _RUNBOOKS
         loaded: list[dict[str, object]] = []
-        for path in sorted(_FIXTURES_DIR.glob("runbook_*.json")):
+        for path in sorted(get_fixtures_dir().glob("runbook_*.json")):
             loaded.append(json.loads(path.read_text(encoding="utf-8")))
         _RUNBOOKS = loaded
     return _RUNBOOKS

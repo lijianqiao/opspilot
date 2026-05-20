@@ -103,6 +103,11 @@ POSTGRES_USER=opspilot
 POSTGRES_PASSWORD=opspilot
 POSTGRES_DB=opspilot
 POSTGRES_HOST_PORT=5432
+
+# ---- Mock 联调（Docker / 飞书读 fixtures 数据，默认开启）----
+OPSPILOT_USE_MOCK_TOOLS=true
+# Docker 内由 compose 设为 /app/fixtures；宿主机 uv 可留空自动探测
+# OPSPILOT_FIXTURES_DIR=
 ```
 
 | 平台 | base_url | 模型名示例 |
@@ -219,7 +224,10 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/
 3. **预期**  
    - 机器人在数秒～数十秒内回复文本（首次调用云端 LLM 较慢）  
    - `feishu-bot` 日志：收到消息 → 调用 agent-core  
-   - `agent-core` 日志：Supervisor / Plan-Execute 与工具调用
+   - `agent-core` 日志：Supervisor / Plan-Execute 与工具调用  
+   - 问「哪些 pod 不正常」应能列出 fixture 中的异常 Pod（如 `order-service` CrashLoopBackOff），**不要**出现 `/app/fixtures/... 不存在`
+
+**Mock 数据**：`.env` 保持 `OPSPILOT_USE_MOCK_TOOLS=true`（默认）。镜像已包含 `fixtures/`，compose 另挂载 `../fixtures:/app/fixtures:ro` 便于改数据后无需重建。若改为 `false`，`kubectl get/describe` 会调真实集群（需容器内 `kubectl` 与 kubeconfig 挂载）；Prometheus/Loki/写操作尚未接真 API。
 
 4. **危险操作（HITL）**  
    - 触发需确认的工具（如 scale）后，回复文本中含 `request_id=...`  

@@ -10,11 +10,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
+from opspilot.tools.fixtures_path import (
+    kubectl_describe_real,
+    kubectl_get_pods_real,
+    read_fixture_json,
+    use_mock_tools,
+)
 from opspilot.tools.registry import register_tool
-
-_FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
 @register_tool
@@ -33,7 +36,10 @@ def kubectl_get(resource: str, namespace: str = "default") -> str:
             表格化列表或不支持资源类型的提示。
     """
     if resource == "pods":
-        raw = json.loads((_FIXTURES_DIR / "kubectl_pods.json").read_text(encoding="utf-8"))
+        if not use_mock_tools():
+            return kubectl_get_pods_real(namespace)
+        raw = read_fixture_json("kubectl_pods.json")
+        assert isinstance(raw, dict)
         pods = [p for p in raw["pods"] if p["namespace"] == namespace]
         if not pods:
             return f"namespace {namespace} 下没有找到 pod。"
@@ -60,7 +66,10 @@ def kubectl_describe(resource: str, name: str, namespace: str = "default") -> st
         Formatted describe output or not-found message.
             格式化的 describe 输出或未找到提示。
     """
-    raw = json.loads((_FIXTURES_DIR / "kubectl_describe.json").read_text(encoding="utf-8"))
+    if not use_mock_tools():
+        return kubectl_describe_real(resource, name, namespace)
+    raw = read_fixture_json("kubectl_describe.json")
+    assert isinstance(raw, dict)
     for item in raw["resources"]:
         if item["kind"] == resource and item["name"] == name and item["namespace"] == namespace:
             parts = [

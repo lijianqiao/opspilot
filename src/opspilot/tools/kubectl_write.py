@@ -10,15 +10,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
+from opspilot.tools.fixtures_path import read_fixture_json, use_mock_tools
 from opspilot.tools.registry import register_tool
-
-_FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
 def _load_deployments() -> list[dict[str, object]]:
-    raw = json.loads((_FIXTURES_DIR / "kubectl_write.json").read_text(encoding="utf-8"))
+    if not use_mock_tools():
+        return []
+    raw = read_fixture_json("kubectl_write.json")
+    assert isinstance(raw, dict)
     return raw["deployments"]
 
 
@@ -39,6 +40,8 @@ def kubectl_scale(deployment: str, replicas: int, namespace: str = "default") ->
         Mock scale result or not-found message.
             模拟扩缩容结果或未找到提示。
     """
+    if not use_mock_tools():
+        return "真实集群模式下 kubectl_scale 尚未实现，请使用 mock 联调或自行扩展。"
     for d in _load_deployments():
         if d["name"] == deployment and d["namespace"] == namespace:
             return f"deployment.apps/{deployment} scaled: {d['replicas']} -> {replicas} (namespace={namespace})"
@@ -60,6 +63,8 @@ def kubectl_rollout_restart(deployment: str, namespace: str = "default") -> str:
         Mock restart acknowledgment or not-found message.
             模拟重启确认或未找到提示。
     """
+    if not use_mock_tools():
+        return "真实集群模式下 kubectl_rollout_restart 尚未实现，请使用 mock 联调或自行扩展。"
     for d in _load_deployments():
         if d["name"] == deployment and d["namespace"] == namespace:
             return f"deployment.apps/{deployment} 已触发滚动重启 (namespace={namespace})"
