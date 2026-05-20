@@ -48,6 +48,14 @@ def _select_agent(text: str) -> tuple[str, bool]:
     """Return (stripped_text, use_plan_execute).
 
     返回 (去前缀后的文本, 是否使用 Plan-Execute)。
+
+    Args:
+        text: Raw Feishu message text (may include @mention or plan prefix).
+            原始飞书消息（可能含 @ 提及或规划前缀）。
+
+    Returns:
+        Tuple of stripped question and whether to use Plan-Execute.
+            (去前缀后的问题, 是否走 Plan-Execute)。
     """
     cleaned = _FEISHU_MENTION_RE.sub("", text)
     for prefix in ("规划：", "规划:", "/plan "):
@@ -60,6 +68,16 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     """Handle a Feishu message: strip, validate, delegate to agent.
 
     处理飞书消息：去空白、校验后委托 agent 回答。
+
+    Args:
+        text: Incoming message text.
+            入站消息文本。
+        agent: Async callable(question) -> answer.
+            异步 agent(question) -> answer。
+
+    Returns:
+        Agent answer or user-safe error message.
+            Agent 回答或对用户安全的错误提示。
     """
     text = text.strip()
     if not text:
@@ -75,6 +93,18 @@ def _run_blocking(coro_factory: Callable[[], Awaitable[object]]) -> object:
     """Run an async coroutine factory in a fresh thread event loop.
 
     在无运行中事件循环的新线程中执行异步协程工厂。
+
+    Args:
+        coro_factory: Zero-arg callable returning an awaitable.
+            无参可调用对象，返回 awaitable。
+
+    Returns:
+        Coroutine result.
+            协程执行结果。
+
+    Raises:
+        Exception: Re-raises any exception from the worker thread.
+            工作线程中的异常会原样抛出。
     """
     box: dict[str, object] = {}
     error: dict[str, Exception] = {}
@@ -94,7 +124,20 @@ def _run_blocking(coro_factory: Callable[[], Awaitable[object]]) -> object:
 
 
 def _run_blocking_question(text: str, agent: AgentFn) -> str:
-    """Run handle_question in a fresh event loop on a new thread."""
+    """Run handle_question in a fresh event loop on a new thread.
+
+    在新线程的独立事件循环中运行 handle_question。
+
+    Args:
+        text: Incoming message text.
+            入站消息文本。
+        agent: Async agent callable.
+            异步 agent 可调用对象。
+
+    Returns:
+        Answer string from handle_question.
+            handle_question 返回的回答字符串。
+    """
     return str(_run_blocking(lambda: handle_question(text, agent)))
 
 
@@ -107,6 +150,16 @@ async def _handle_via_agent_core(
     """Handle one Feishu message via agent-core HTTP API.
 
     经 agent-core HTTP 处理一条飞书消息：回复文本并在需要时发确认卡片。
+
+    Args:
+        lark_client: Lark SDK client for sending messages.
+            用于发消息的 Lark 客户端。
+        chat_id: Feishu chat id to reply in.
+            要回复的飞书会话 ID。
+        question: Raw user message text.
+            用户原始消息文本。
+        agent_client: HTTP client to agent-core.
+            调用 agent-core 的 HTTP 客户端。
     """
     stripped, use_plan = _select_agent(question)
 
@@ -124,7 +177,20 @@ async def _maybe_send_confirm_card(
     answer: str,
     agent_client: AgentClient,
 ) -> None:
-    """If answer mentions request_id=..., fetch pending from agent-core and send card."""
+    """If answer mentions request_id=..., fetch pending from agent-core and send card.
+
+    若回答含 request_id=...，从 agent-core 拉取 pending 并发送确认卡片。
+
+    Args:
+        lark_client: Lark SDK client.
+            Lark 客户端。
+        chat_id: Target chat id.
+            目标会话 ID。
+        answer: Agent reply text possibly containing request_id.
+            可能含 request_id 的 Agent 回复。
+        agent_client: HTTP client for internal pending lookup.
+            用于内部 pending 查询的 HTTP 客户端。
+    """
     m = _REQUEST_ID_RE.search(answer)
     if m is None:
         return
@@ -142,6 +208,18 @@ async def _maybe_send_confirm_card(
 
 
 def _extract_text(event: P2ImMessageReceiveV1) -> str:
+    """Extract plain text from a Feishu IM message receive event.
+
+    从飞书 IM 收消息事件中解析纯文本。
+
+    Args:
+        event: Lark P2ImMessageReceiveV1 event.
+            Lark 收消息事件对象。
+
+    Returns:
+        Message text or empty string if unavailable.
+            消息文本；无法解析时返回空字符串。
+    """
     data = event.event
     if data is None or data.message is None:
         return ""
@@ -151,12 +229,36 @@ def _extract_text(event: P2ImMessageReceiveV1) -> str:
 
 @lru_cache(maxsize=4)
 def _get_lark_client(app_id: str, app_secret: str) -> lark.Client:
-    """Cached lark.Client (审查报告：避免每次回复都 builder())。"""
+    """Return a cached lark.Client for the given app credentials.
+
+    返回给定应用凭证的缓存 lark.Client（避免每次回复都 builder）。
+
+    Args:
+        app_id: Feishu application id.
+            飞书应用 App ID。
+        app_secret: Feishu application secret.
+            飞书应用密钥。
+
+    Returns:
+        Configured Lark client.
+            配置完成的 Lark 客户端。
+    """
     return lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
 
 
 def _send_reply(client: lark.Client, chat_id: str, answer: str) -> None:
-    """Send a text reply to a Feishu chat."""
+    """Send a text reply to a Feishu chat.
+
+    向飞书会话发送文本回复。
+
+    Args:
+        client: Lark SDK client.
+            Lark 客户端。
+        chat_id: Target chat id.
+            目标会话 ID。
+        answer: Reply body text.
+            回复正文。
+    """
     assert client.im is not None
     client.im.v1.message.create(
         CreateMessageRequest.builder()
@@ -173,7 +275,18 @@ def _send_reply(client: lark.Client, chat_id: str, answer: str) -> None:
 
 
 def _send_card(client: lark.Client, chat_id: str, card_json: str) -> None:
-    """Send a Feishu interactive card (危险操作确认卡片)。"""
+    """Send a Feishu interactive card (HITL confirm card).
+
+    发送飞书交互卡片（危险操作确认卡片）。
+
+    Args:
+        client: Lark SDK client.
+            Lark 客户端。
+        chat_id: Target chat id.
+            目标会话 ID。
+        card_json: Serialized interactive card JSON.
+            序列化后的交互卡片 JSON。
+    """
     assert client.im is not None
     client.im.v1.message.create(
         CreateMessageRequest.builder()

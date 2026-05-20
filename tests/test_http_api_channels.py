@@ -16,7 +16,12 @@ from opspilot.entrypoints.http_api import create_app
 
 @pytest.fixture
 def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """TestClient with API and channel-internal Bearer tokens configured.
+
+    配置 API 与渠道内部 Bearer 令牌后的 TestClient。
+    """
     monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "test-secret")
+    monkeypatch.setenv("OPSPILOT_CHANNEL_INTERNAL_TOKEN", "channel-secret")
     from opspilot.config import get_settings
 
     get_settings.cache_clear()
@@ -28,6 +33,11 @@ def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def test_get_pending_returns_confirmation(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify get pending returns confirmation.
+
+    验证：get pending returns confirmation。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
     monkeypatch.setattr("opspilot.entrypoints.http_api.STORE", store)
@@ -39,11 +49,54 @@ def test_get_pending_returns_confirmation(authed_client: TestClient, monkeypatch
     assert r.status_code == 200
     body = r.json()
     assert body["request_id"] == pc.request_id
+    assert "token" not in body
+    assert body["tool"] == "kubectl_scale"
+
+
+def test_get_pending_internal_returns_token(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify get pending internal returns token.
+
+    验证：get pending internal returns token。
+    """
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
+    monkeypatch.setattr("opspilot.entrypoints.http_api.STORE", store)
+
+    r = authed_client.get(
+        f"/internal/channels/pending/{pc.request_id}",
+        headers={"Authorization": "Bearer channel-secret"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["request_id"] == pc.request_id
     assert body["token"] == pc.token
     assert body["tool"] == "kubectl_scale"
 
 
+def test_get_pending_internal_rejects_public_token(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify get pending internal rejects public token.
+
+    验证：get pending internal rejects public token。
+    """
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
+    monkeypatch.setattr("opspilot.entrypoints.http_api.STORE", store)
+
+    r = authed_client.get(
+        f"/internal/channels/pending/{pc.request_id}",
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert r.status_code == 401
+
+
 def test_get_pending_missing_returns_404(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify get pending missing returns 404.
+
+    验证：get pending missing returns 404。
+    """
     monkeypatch.setattr(
         "opspilot.entrypoints.http_api.STORE",
         ConfirmationStore(ttl_seconds=300),
@@ -56,6 +109,11 @@ def test_get_pending_missing_returns_404(authed_client: TestClient, monkeypatch:
 
 
 def test_feishu_card_action_confirm(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify feishu card action confirm.
+
+    验证：feishu card action confirm。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", "x")
     monkeypatch.setattr("opspilot.entrypoints.http_api.STORE", store)

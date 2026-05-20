@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import httpx
 from tenacity import (
@@ -41,10 +42,28 @@ class CircuitOpenError(RuntimeError):
     """
 
 
+@dataclass
+class CircuitBreakerState:
+    """Shared circuit breaker state for one logical LLM provider.
+    共享一个逻辑 LLM Provider 的熔断器状态。
+    """
+
+    consec_failures: int = 0
+    open_until: float = 0.0
+
+
 def _is_retryable(exc: BaseException) -> bool:
     """Return True for transient failures (transport errors, 5xx).
 
     判定是否为可重试的瞬时故障（传输错误、5xx）。
+
+    Args:
+        exc: Exception to check.
+            要检查的异常。
+
+    Returns:
+        True if the exception is retryable, False otherwise.
+            如果异常可重试，返回 True，否则返回 False。
 
     4xx client errors are not retried.
     4xx 客户端错误不重试。
@@ -67,7 +86,12 @@ class LLMClient:
     支持指数退避重试、分层超时与进程内熔断；模块级常量可在测试中 monkeypatch。
     """
 
-    def __init__(self, settings: Settings, http_client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        http_client: httpx.AsyncClient | None = None,
+        breaker: CircuitBreakerState | None = None,
+    ) -> None:
         """Initialize LLM client.
 
         初始化 LLM 客户端。
@@ -77,12 +101,12 @@ class LLMClient:
                 应用配置（基础 URL、模型、API 密钥）。
             http_client: Optional shared httpx.AsyncClient.
                 可选的共享 httpx.AsyncClient。
+            breaker: Optional shared circuit breaker state.
+                可选的共享熔断器状态。
         """
         self._settings = settings
         self._client = http_client or httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
-        # 熔断器状态（进程内、单实例）
-        self._consec_failures = 0
-        self._open_until = 0.0
+        self._breaker = breaker or CircuitBreakerState()
 
     async def chat(self, messages: Sequence[Message]) -> str:
         """Send chat completion request and return assistant content.
@@ -105,8 +129,8 @@ class LLMClient:
         """
         # 熔断器：打开期内快速失败
         now = time.monotonic()
-        if now < self._open_until:
-            raise CircuitOpenError(f"LLM circuit open for {self._open_until - now:.1f}s")
+        if now < self._breaker.open_until:
+            raise CircuitOpenError(f"LLM circuit open for {self._breaker.open_until - now:.1f}s")
 
         started = time.perf_counter()
         status = "success"
@@ -132,14 +156,14 @@ class LLMClient:
                     resp.raise_for_status()
                     content = resp.json()["choices"][0]["message"]["content"]
             # 成功 → 重置（含半开探测成功）
-            self._consec_failures = 0
-            self._open_until = 0.0
+            self._breaker.consec_failures = 0
+            self._breaker.open_until = 0.0
             return content
         except Exception:
             status = "error"
-            self._consec_failures += 1
-            if self._consec_failures >= _CB_THRESHOLD:
-                self._open_until = time.monotonic() + _CB_COOLDOWN_SECONDS
+            self._breaker.consec_failures += 1
+            if self._breaker.consec_failures >= _CB_THRESHOLD:
+                self._breaker.open_until = time.monotonic() + _CB_COOLDOWN_SECONDS
             raise
         finally:
             elapsed = time.perf_counter() - started

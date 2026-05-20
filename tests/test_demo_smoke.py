@@ -11,6 +11,11 @@ from scripts.demo_smoke import build_demo_requests
 
 
 def test_build_demo_requests_contains_core_scenarios() -> None:
+    """
+    Verify build demo requests contains core scenarios.
+
+    验证：build demo requests contains core scenarios。
+    """
     requests = build_demo_requests()
     questions = [item["question"] for item in requests]
     assert any("pod" in q for q in questions)

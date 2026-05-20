@@ -17,6 +17,7 @@ wheels/
 
 # ides
 .claude/
+CLAUDE.md
 
 # environment variables
 .env

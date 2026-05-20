@@ -12,6 +12,11 @@ from opspilot.entrypoints.feishu_callback import handle_card_action
 
 
 def test_card_confirm_authorizes_via_store() -> None:
+    """
+    Verify card confirm authorizes via store.
+
+    验证：card confirm authorizes via store。
+    """
     store = ConfirmationStore(300)
     pc = store.request("kubectl_scale", "x")
     payload = {
@@ -25,6 +30,11 @@ def test_card_confirm_authorizes_via_store() -> None:
 
 
 def test_card_cancel_does_not_authorize() -> None:
+    """
+    Verify card cancel does not authorize.
+
+    验证：card cancel does not authorize。
+    """
     store = ConfirmationStore(300)
     pc = store.request("kubectl_scale", "x")
     payload = {
@@ -37,6 +47,11 @@ def test_card_cancel_does_not_authorize() -> None:
 
 
 def test_card_wrong_token_rejected() -> None:
+    """
+    Verify card wrong token rejected.
+
+    验证：card wrong token rejected。
+    """
     store = ConfirmationStore(300)
     pc = store.request("kubectl_scale", "x")
     payload = {
@@ -50,6 +65,11 @@ def test_card_wrong_token_rejected() -> None:
 
 def test_card_missing_operator_falls_back_to_unknown() -> None:
     # 防御性：payload 可能字段不全
+    """
+    Verify card missing operator falls back to unknown.
+
+    验证：card missing operator falls back to unknown。
+    """
     store = ConfirmationStore(300)
     pc = store.request("kubectl_scale", "x")
     payload = {"action": {"value": {"action": "confirm", "request_id": pc.request_id, "token": pc.token}}}

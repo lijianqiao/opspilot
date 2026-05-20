@@ -82,6 +82,8 @@ OPSPILOT_LLM_API_KEY=sk-你的云端密钥
 
 # ---- HTTP API 鉴权（必填：agent-core 与 feishu-bot 共用同一 token）----
 OPSPILOT_API_AUTH_TOKEN=请设置一串随机密钥-仅联调可自拟
+# ---- 渠道内部鉴权（必填：feishu-bot 查询危险操作确认卡片 token）----
+OPSPILOT_CHANNEL_INTERNAL_TOKEN=请设置另一串随机密钥-不要与 API token 相同
 
 # ---- 飞书 Bot（飞书联调必填，与开放平台应用一致）----
 OPSPILOT_FEISHU_APP_ID=cli_xxxxxxxx
@@ -140,7 +142,7 @@ curl -s https://api.deepseek.com/v1/chat/completions \
 | **机器人** | 将应用添加为群机器人，或在与机器人的私聊中 @ 机器人 |
 | **凭证** | 将 App ID / App Secret、事件订阅的 Verification Token、Encrypt Key 填入根目录 `.env` 四项 `OPSPILOT_FEISHU_*` |
 
-`OPSPILOT_API_AUTH_TOKEN` 与 `OPSPILOT_FEISHU_*` 须同时配置：`feishu-bot` 调 agent-core 的 `/ask` 等接口需要 Bearer，与 curl 测试使用**同一 token**。
+`OPSPILOT_API_AUTH_TOKEN`、`OPSPILOT_CHANNEL_INTERNAL_TOKEN` 与 `OPSPILOT_FEISHU_*` 须同时配置：`feishu-bot` 调 agent-core 的 `/ask` 等公开接口使用 API token，查询危险操作确认卡片 token 使用 channel internal token。
 
 ### 2.5 联调用的 shell 变量（可选）
 
@@ -270,6 +272,8 @@ curl -s "http://localhost:8000/channels/pending/<request_id>" \
   -H "Authorization: Bearer ${OPSPILOT_API_AUTH_TOKEN}" | python3 -m json.tool
 ```
 
+公开 pending 查询不会返回确认 token。只有 `feishu-bot` 使用 `OPSPILOT_CHANNEL_INTERNAL_TOKEN` 调用内部接口生成确认卡片。
+
 ### 4.2 `/ask` — HTTP 直接问答（辅助）
 
 ```bash
@@ -388,13 +392,13 @@ dc logs agent-core
 3. 应用是否已发布、机器人是否已加入群并 @  
 4. 事件订阅是否为 **长连接** 模式  
 5. 同机 curl `/ask`（§4.1 辅助命令）是否正常；若 curl 失败，先修 agent-core / LLM  
-6. `feishu-bot` 调 core 需 `OPSPILOT_API_AUTH_TOKEN`；与 curl 使用同一值
+6. `feishu-bot` 调 core 公开接口需 `OPSPILOT_API_AUTH_TOKEN`，查询确认卡片需 `OPSPILOT_CHANNEL_INTERNAL_TOKEN`
 
 ### Q7: 飞书有回复但没有确认卡片
 
 - 回复正文是否包含 `request_id=`（未触发危险工具则不会发卡）  
 - `dc logs feishu-bot` 是否出现 `get_pending` / `sent confirm card`  
-- 用 §4.1 的 `GET /channels/pending/<id>` 确认 agent-core 侧 pending 仍存在（未过期）
+- 用 §4.1 的 `GET /channels/pending/<id>` 确认 agent-core 侧 pending 仍存在（未过期）；该公开接口不会返回 token
 
 ### Q8: 点击确认卡片后 Agent 没有继续执行
 

@@ -157,7 +157,42 @@ class ConfirmationStore:
             self._pending.pop(request_id, None)
             return actor
 
+    def consume_if_matches(self, request_id: str, tool: str, tool_input: str) -> str | None:
+        """Consume a confirmed request only when it matches the original call.
+        消费已确认请求，仅当与原始调用匹配时。
+
+        Args:
+            request_id: Request id to consume.
+                要消费的请求 ID。
+            tool: Tool name.
+                工具名称。
+            tool_input: Raw tool input.
+                工具输入原文。
+
+        Returns:
+            Confirming actor string, or None if not confirmed or mismatched.
+                确认人标识，未确认或不匹配时为 None。
+        """
+        with self._lock:
+            pc = self._pending.get(request_id)
+            if pc is None:
+                return None
+            if time.monotonic() > pc.expires_at:
+                self._pending.pop(request_id, None)
+                self._confirmed_by.pop(request_id, None)
+                return None
+            if pc.tool != tool or pc.tool_input != tool_input:
+                return None
+            actor = self._confirmed_by.pop(request_id, None)
+            if actor is None:
+                return None
+            self._pending.pop(request_id, None)
+            return actor
+
     def _gc_locked(self) -> None:
+        """Garbage collect expired pending confirmations.
+        垃圾收集过期待确认记录。
+        """
         now = time.monotonic()
         dead = [rid for rid, pc in self._pending.items() if now > pc.expires_at]
         for rid in dead:
@@ -166,6 +201,9 @@ class ConfirmationStore:
 
 
 def _build_default_store() -> ConfirmationStore:
+    """Build the default confirmation store.
+    构建默认确认状态存储。
+    """
     from opspilot.config import get_settings
 
     return ConfirmationStore(ttl_seconds=get_settings().confirm_ttl_seconds)

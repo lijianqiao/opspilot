@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import httpx
 
 from opspilot.config import Settings, get_settings
-from opspilot.entrypoints.agent_api_models import PendingConfirmationView
+from opspilot.entrypoints.agent_api_models import PendingConfirmationInternalView
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,16 @@ class AgentClient:
     """
 
     def __init__(self, settings: Settings | None = None, http_client: httpx.AsyncClient | None = None) -> None:
+        """Initialize the HTTP client for agent-core.
+
+        初始化连接 agent-core 的 HTTP 客户端。
+
+        Args:
+            settings: Optional settings; defaults to cached get_settings().
+                可选配置；默认使用 get_settings() 缓存。
+            http_client: Optional shared AsyncClient (for tests).
+                可选共享 AsyncClient（测试注入用）。
+        """
         self._settings = settings or get_settings()
         self._owns_client = http_client is None
         self._client = http_client or httpx.AsyncClient(
@@ -43,9 +53,39 @@ class AgentClient:
         )
 
     def _auth_header(self) -> dict[str, str]:
+        """Build Authorization header for public agent-core API.
+
+        构建面向外部/渠道的 agent-core API 鉴权头。
+
+        Returns:
+            Header dict with Bearer OPSPILOT_API_AUTH_TOKEN.
+                含 Bearer OPSPILOT_API_AUTH_TOKEN 的请求头字典。
+
+        Raises:
+            RuntimeError: When OPSPILOT_API_AUTH_TOKEN is empty.
+                未配置 OPSPILOT_API_AUTH_TOKEN 时抛出。
+        """
         token = self._settings.api_auth_token
         if not token:
             raise RuntimeError("OPSPILOT_API_AUTH_TOKEN 未配置，无法调用 agent-core")
+        return {"Authorization": f"Bearer {token}"}
+
+    def _channel_internal_auth_header(self) -> dict[str, str]:
+        """Build Authorization header for internal channel-only endpoints.
+
+        构建渠道内部接口（如 pending 含 token）的鉴权头。
+
+        Returns:
+            Header dict with Bearer OPSPILOT_CHANNEL_INTERNAL_TOKEN.
+                含 Bearer OPSPILOT_CHANNEL_INTERNAL_TOKEN 的请求头字典。
+
+        Raises:
+            RuntimeError: When OPSPILOT_CHANNEL_INTERNAL_TOKEN is empty.
+                未配置 OPSPILOT_CHANNEL_INTERNAL_TOKEN 时抛出。
+        """
+        token = self._settings.channel_internal_token
+        if not token:
+            raise RuntimeError("OPSPILOT_CHANNEL_INTERNAL_TOKEN 未配置，无法查询待确认操作")
         return {"Authorization": f"Bearer {token}"}
 
     async def ask(self, question: str, *, plan: bool = False) -> str:
@@ -72,7 +112,7 @@ class AgentClient:
         return r.json()["answer"]
 
     async def get_pending(self, request_id: str) -> PendingConfirmation | None:
-        """GET /channels/pending/{request_id}; None if 404.
+        """GET /internal/channels/pending/{request_id}; None if 404.
 
         查询待确认记录；404 时返回 None。
 
@@ -85,13 +125,13 @@ class AgentClient:
                 待确认记录，或不存在/已过期时为 None。
         """
         r = await self._client.get(
-            f"/channels/pending/{request_id}",
-            headers=self._auth_header(),
+            f"/internal/channels/pending/{request_id}",
+            headers=self._channel_internal_auth_header(),
         )
         if r.status_code == 404:
             return None
         r.raise_for_status()
-        view = PendingConfirmationView.model_validate(r.json())
+        view = PendingConfirmationInternalView.model_validate(r.json())
         return PendingConfirmation(
             request_id=view.request_id,
             tool=view.tool,

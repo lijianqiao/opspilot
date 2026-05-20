@@ -19,6 +19,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
+_MAX_FIELD_CHARS = 2000
 
 
 def _default_path() -> str:
@@ -33,6 +34,23 @@ def _default_path() -> str:
     from opspilot.config import get_settings
 
     return get_settings().audit_log_path
+
+
+def _safe_field(value: str) -> str:
+    """Safely truncate the value to the maximum field length.
+    安全地截断值到最大字段长度。
+
+    Args:
+        value: String value to truncate.
+            要截断的字符串值。
+
+    Returns:
+        Truncated string value.
+            截断后的字符串值。
+    """
+    from opspilot.agent.guardrails import redact
+
+    return redact(value)[:_MAX_FIELD_CHARS]
 
 
 def record_operation(
@@ -50,10 +68,10 @@ def record_operation(
 
     追加一条审计记录；不向调用方热路径抛出异常。
 
-    Each line records who/when/tool/params/confirmation/result/rollback hints.
-    每行记录：操作者、时间、工具、参数、确认人、状态、结果与回滚信息。
-
     Args:
+
+        Each line records who/when/tool/params/confirmation/result/rollback hints.
+        每行记录：操作者、时间、工具、参数、确认人、状态、结果与回滚信息。
         tool: Tool name invoked.
             调用的工具名称。
         tool_input: Serialized tool input (truncated in storage if needed).
@@ -74,11 +92,11 @@ def record_operation(
     record = {
         "ts": datetime.now(UTC).isoformat(),
         "tool": tool,
-        "tool_input": tool_input,
+        "tool_input": _safe_field(tool_input),
         "actor": actor,
         "confirmed_by": confirmed_by,
         "status": status,
-        "result": result[:2000],
+        "result": _safe_field(result),
         "rollback": rollback,
     }
     target = path or _default_path()

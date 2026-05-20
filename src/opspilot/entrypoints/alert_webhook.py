@@ -12,16 +12,35 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import FastAPI, Header, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 
 from opspilot.agent.alert_handler import handle_alert
 from opspilot.agent.guardrails import redact
 from opspilot.config import get_settings
 from opspilot.entrypoints.auth import verify_alertmanager_signature
-from opspilot.llm.client import LLMClient
+from opspilot.entrypoints.body_limits import (
+    MAX_ALERT_BODY_BYTES,
+    content_length_exceeds,
+    read_limited_body,
+    require_alertmanager_payload,
+    require_json_object,
+    too_large_response,
+)
+from opspilot.llm.client import CircuitBreakerState, LLMClient
 
 logger = logging.getLogger(__name__)
+_LLM_BREAKER = CircuitBreakerState()
 app = FastAPI(title="OpsPilot Alert Handler")
+
+
+@app.middleware("http")
+async def reject_large_bodies(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Reject requests with overly large bodies.
+    拒绝请求体过大的请求。
+    """
+    if request.url.path == "/alert" and content_length_exceeds(request, MAX_ALERT_BODY_BYTES):
+        return too_large_response()
+    return await call_next(request)
 
 
 @app.post("/alert")
@@ -44,15 +63,18 @@ async def receive_alert(request: Request, x_opspilot_signature: str = Header(def
         Dict with status and diagnosis fields.
             含 status 与 diagnosis 字段的字典。
     """
-    raw_body = await request.body()
+    raw_body = await read_limited_body(request, MAX_ALERT_BODY_BYTES)
     # Fail-closed on unconfigured secret; raises HTTPException(401) on bad sig.
     verify_alertmanager_signature(raw_body, x_opspilot_signature)
 
-    payload = json.loads(raw_body)
+    try:
+        payload = require_alertmanager_payload(require_json_object(json.loads(raw_body)))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="invalid json") from exc
     logger.info("Alert webhook received: %s alert(s)", len(payload.get("alerts", [])))
 
     settings = get_settings()
-    llm = LLMClient(settings)
+    llm = LLMClient(settings, breaker=_LLM_BREAKER)
     try:
         report = await handle_alert(payload, llm)
         return {"status": "ok", "diagnosis": report}

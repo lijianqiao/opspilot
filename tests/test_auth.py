@@ -43,6 +43,11 @@ async def test_require_bearer_fail_closed_when_token_unconfigured(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
     # 空 token → 503，避免"忘配 token 就裸奔"
+    """
+    Verify require bearer fail closed when token unconfigured.
+
+    验证：require bearer fail closed when token unconfigured。
+    """
     monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "")
     transport = httpx.ASGITransport(app=_build_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -54,6 +59,11 @@ async def test_require_bearer_fail_closed_when_token_unconfigured(
 async def test_require_bearer_rejects_missing_header(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
+    """
+    Verify require bearer rejects missing header.
+
+    验证：require bearer rejects missing header。
+    """
     monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "secret123")
     transport = httpx.ASGITransport(app=_build_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -63,6 +73,11 @@ async def test_require_bearer_rejects_missing_header(
 
 @pytest.mark.anyio
 async def test_require_bearer_rejects_wrong_token(monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None) -> None:
+    """
+    Verify require bearer rejects wrong token.
+
+    验证：require bearer rejects wrong token。
+    """
     monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "secret123")
     transport = httpx.ASGITransport(app=_build_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -74,6 +89,11 @@ async def test_require_bearer_rejects_wrong_token(monkeypatch: pytest.MonkeyPatc
 async def test_require_bearer_accepts_correct_token(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
+    """
+    Verify require bearer accepts correct token.
+
+    验证：require bearer accepts correct token。
+    """
     monkeypatch.setenv("OPSPILOT_API_AUTH_TOKEN", "secret123")
     transport = httpx.ASGITransport(app=_build_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -84,6 +104,11 @@ async def test_require_bearer_accepts_correct_token(
 def test_verify_alertmanager_signature_fail_closed_when_secret_unconfigured(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
+    """
+    Verify verify alertmanager signature fail closed when secret unconfigured.
+
+    验证：verify alertmanager signature fail closed when secret unconfigured。
+    """
     from fastapi import HTTPException
 
     monkeypatch.setenv("OPSPILOT_ALERTMANAGER_HMAC_SECRET", "")
@@ -95,6 +120,11 @@ def test_verify_alertmanager_signature_fail_closed_when_secret_unconfigured(
 def test_verify_alertmanager_signature_accepts_correct_hmac(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
+    """
+    Verify verify alertmanager signature accepts correct hmac.
+
+    验证：verify alertmanager signature accepts correct hmac。
+    """
     monkeypatch.setenv("OPSPILOT_ALERTMANAGER_HMAC_SECRET", "shared")
     body = b'{"alerts":[]}'
     sig = hmac.new(b"shared", body, hashlib.sha256).hexdigest()
@@ -105,6 +135,11 @@ def test_verify_alertmanager_signature_accepts_correct_hmac(
 def test_verify_alertmanager_signature_rejects_wrong_hmac(
     monkeypatch: pytest.MonkeyPatch, _clear_settings_cache: None
 ) -> None:
+    """
+    Verify verify alertmanager signature rejects wrong hmac.
+
+    验证：verify alertmanager signature rejects wrong hmac。
+    """
     from fastapi import HTTPException
 
     monkeypatch.setenv("OPSPILOT_ALERTMANAGER_HMAC_SECRET", "shared")

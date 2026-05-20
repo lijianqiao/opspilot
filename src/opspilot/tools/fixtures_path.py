@@ -15,12 +15,17 @@ from functools import lru_cache
 from pathlib import Path
 
 from opspilot.config import get_settings
+from opspilot.tools.policy import kubectl_describe_kind, reject_kubectl_read_resource
 
 
 def _default_fixtures_dir() -> Path:
     """Infer project fixtures/ by walking up from this module.
 
     从本模块向上查找含 pyproject.toml 的目录，定位 fixtures/。
+
+    Returns:
+        Path to fixtures directory.
+            fixtures 目录的绝对路径。
     """
     here = Path(__file__).resolve().parent
     for parent in [here, *here.parents]:
@@ -57,6 +62,10 @@ def use_mock_tools() -> bool:
     """Whether tools read mock data from fixtures instead of live backends.
 
     工具是否从 fixtures 读取模拟数据（而非真实集群 / 观测后端）。
+
+    Returns:
+        Value of Settings.use_mock_tools (OPSPILOT_USE_MOCK_TOOLS).
+            Settings.use_mock_tools 的值。
     """
     return get_settings().use_mock_tools
 
@@ -130,7 +139,11 @@ def kubectl_describe_real(resource: str, name: str, namespace: str) -> str:
         Command output or user-facing error message in Chinese.
             命令输出或中文错误说明。
     """
-    kind = resource.rstrip("s") if resource.endswith("s") else resource
+    rejection = reject_kubectl_read_resource(resource)
+    if rejection is not None:
+        return rejection
+
+    kind = kubectl_describe_kind(resource)
     try:
         proc = subprocess.run(
             ["kubectl", "describe", kind, name, "-n", namespace],

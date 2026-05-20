@@ -23,6 +23,12 @@ class _NoopLLM:
 
 
 def test_cli_ask_outputs_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify cli ask outputs answer.
+
+    验证：cli ask outputs answer。
+    """
+
     async def fake_run_react_graph(question: str, llm: object, max_steps: int = 5) -> str:
         return f"FAKE:{question}"
 
@@ -36,6 +42,12 @@ def test_cli_ask_outputs_answer(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cli_ask_plan_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify cli ask plan flag.
+
+    验证：cli ask plan flag。
+    """
+
     async def fake_run_plan_execute(question: str, llm: object, max_steps: int = 8) -> str:
         return f"PLAN:{question}"
 

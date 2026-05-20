@@ -41,6 +41,11 @@ def _seed(store: QdrantStore, emb_svc: EmbeddingService) -> None:
 
 
 def test_retrieve_returns_results():
+    """
+    Verify retrieve returns results.
+
+    验证：retrieve returns results。
+    """
     svc = _build_service()
     _seed(svc._store, svc._embedding_service)
     results = svc.retrieve("OOMKilled 怎么排查", top_k=2)
@@ -49,12 +54,22 @@ def test_retrieve_returns_results():
 
 
 def test_retrieve_handles_empty_collection():
+    """
+    Verify retrieve handles empty collection.
+
+    验证：retrieve handles empty collection。
+    """
     svc = _build_service()
     results = svc.retrieve("anything", top_k=3)
     assert results == []
 
 
 def test_retrieve_formats_runbook_text():
+    """
+    Verify retrieve formats runbook text.
+
+    验证：retrieve formats runbook text。
+    """
     svc = _build_service()
     _seed(svc._store, svc._embedding_service)
     text = svc.retrieve_formatted("CPU 高负载")
@@ -62,6 +77,11 @@ def test_retrieve_formats_runbook_text():
 
 
 def test_retrieve_hybrid_respects_top_k():
+    """
+    Verify retrieve hybrid respects top k.
+
+    验证：retrieve hybrid respects top k。
+    """
     svc = _build_service()
     _seed(svc._store, svc._embedding_service)
     results = svc.retrieve("排查", top_k=1)
@@ -69,6 +89,11 @@ def test_retrieve_hybrid_respects_top_k():
 
 
 def test_retrieve_formatted_empty_collection():
+    """
+    Verify retrieve formatted empty collection.
+
+    验证：retrieve formatted empty collection。
+    """
     svc = _build_service()
     text = svc.retrieve_formatted("anything")
     assert text  # returns fallback text, not empty

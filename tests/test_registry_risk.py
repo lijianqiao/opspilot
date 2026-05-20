@@ -15,6 +15,11 @@ from opspilot.tools.registry import (
 
 
 def test_default_risk_is_low() -> None:
+    """Verify tools default to low risk when risk is omitted.
+
+    验证未声明 risk 时默认为 low。
+    """
+
     @register_tool(name="t_low_demo")
     def t_low_demo(x: str) -> str:
         """demo low."""
@@ -26,6 +31,11 @@ def test_default_risk_is_low() -> None:
 
 
 def test_explicit_high_risk() -> None:
+    """Verify register_tool(risk='high') marks the tool as high risk.
+
+    验证 register_tool(risk='high') 标记为高危工具。
+    """
+
     @register_tool(name="t_high_demo", risk="high")
     def t_high_demo(x: str) -> str:
         """demo high."""

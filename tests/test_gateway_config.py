@@ -13,6 +13,11 @@ from opspilot.gateway.config import GatewayProvider, GatewaySettings
 
 
 def test_default_gateway_provider_uses_existing_llama_cpp_defaults() -> None:
+    """
+    Verify default gateway provider uses existing llama cpp defaults.
+
+    验证：default gateway provider uses existing llama cpp defaults。
+    """
     settings = GatewaySettings()
     assert len(settings.providers) == 1
     provider = settings.providers[0]
@@ -22,6 +27,11 @@ def test_default_gateway_provider_uses_existing_llama_cpp_defaults() -> None:
 
 
 def test_provider_list_parses_json_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify provider list parses json env.
+
+    验证：provider list parses json env。
+    """
     monkeypatch.setenv(
         "OPSPILOT_GATEWAY_PROVIDERS",
         '[{"name":"local","base_url":"http://localhost:8080/v1","api_key":"sk-local"},'
@@ -32,5 +42,10 @@ def test_provider_list_parses_json_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_provider_base_url_has_no_trailing_slash() -> None:
+    """
+    Verify provider base url has no trailing slash.
+
+    验证：provider base url has no trailing slash。
+    """
     provider = GatewayProvider(name="x", base_url="http://localhost:8080/v1/", api_key="k")
     assert provider.base_url == "http://localhost:8080/v1"

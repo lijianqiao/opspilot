@@ -14,6 +14,11 @@ from scripts.prepare_sft_dataset import convert_rows
 
 
 def test_convert_rows_outputs_chat_messages() -> None:
+    """
+    Verify convert rows outputs chat messages.
+
+    验证：convert rows outputs chat messages。
+    """
     rows = [{"instruction": "hello", "answer": "world"}]
     converted = list(convert_rows(rows))
     assert converted == [
@@ -28,6 +33,11 @@ def test_convert_rows_outputs_chat_messages() -> None:
 
 
 def test_seed_dataset_has_required_fields() -> None:
+    """
+    Verify seed dataset has required fields.
+
+    验证：seed dataset has required fields。
+    """
     path = Path("fixtures/finetune_seed_prompts.jsonl")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) >= 10

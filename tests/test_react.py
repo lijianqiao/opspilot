@@ -25,6 +25,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_react_calls_tool_then_returns_final_answer() -> None:
+    """
+    Verify react calls tool then returns final answer.
+
+    验证：react calls tool then returns final answer。
+    """
     llm = FakeLLM(
         [
             "Thought: 查一下\nAction: get_pod_status\nAction Input: default",
@@ -39,6 +44,11 @@ async def test_react_calls_tool_then_returns_final_answer() -> None:
 
 @pytest.mark.anyio
 async def test_react_unknown_tool_is_reported_then_recovers() -> None:
+    """
+    Verify react unknown tool is reported then recovers.
+
+    验证：react unknown tool is reported then recovers。
+    """
     llm = FakeLLM(
         [
             "Action: delete_everything\nAction Input: x",
@@ -53,6 +63,11 @@ async def test_react_unknown_tool_is_reported_then_recovers() -> None:
 
 @pytest.mark.anyio
 async def test_react_stops_at_max_steps() -> None:
+    """
+    Verify react stops at max steps.
+
+    验证：react stops at max steps。
+    """
     llm = FakeLLM(["Action: get_pod_status\nAction Input: default"] * 10)
     answer = await run_react("q", llm, max_steps=3)  # type: ignore[arg-type]
     assert "最大推理步数" in answer

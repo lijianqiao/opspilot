@@ -84,8 +84,9 @@ def guarded_call_tool(
 
     if is_dangerous(tool_name, raw_input):
         # 已有人工确认 → 放行执行
-        if confirmed_request_id is not None and store.is_confirmed(confirmed_request_id):
-            confirmer = store.consume(confirmed_request_id)
+        if confirmed_request_id is not None and (
+            confirmer := store.consume_if_matches(confirmed_request_id, tool_name, raw_input)
+        ):
             rollback = rollback_info_for(tool_name, raw_input)
             observation = redact(call_tool(tool_name, raw_input))
             record_operation(

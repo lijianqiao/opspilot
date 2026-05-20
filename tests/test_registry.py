@@ -41,6 +41,11 @@ def _clear_registry() -> Generator[None, None, None]:
 
 
 def test_register_tool_adds_to_registry() -> None:
+    """Verify @register_tool adds the function to the registry.
+
+    验证 @register_tool 将函数注册到注册表。
+    """
+
     @register_tool
     def my_tool(x: str) -> str:
         """A test tool."""
@@ -55,6 +60,11 @@ def test_register_tool_adds_to_registry() -> None:
 
 
 def test_register_tool_infers_json_schema_from_signature() -> None:
+    """Verify JSON Schema is inferred from the tool function signature.
+
+    验证从工具函数签名推断 JSON Schema。
+    """
+
     @register_tool
     def schema_tool(query: str, limit: int = 50) -> str:
         """Query with limit."""
@@ -72,6 +82,11 @@ def test_register_tool_infers_json_schema_from_signature() -> None:
 
 
 def test_register_tool_custom_name() -> None:
+    """Verify register_tool(name=...) overrides the registry key.
+
+    验证 register_tool(name=...) 可覆盖注册名。
+    """
+
     @register_tool(name="custom_name")
     def some_func(x: str) -> str:
         """Has custom name."""
@@ -82,6 +97,11 @@ def test_register_tool_custom_name() -> None:
 
 
 def test_build_tools_prompt_contains_tool_info() -> None:
+    """Verify build_tools_prompt lists registered tool names and params.
+
+    验证 build_tools_prompt 包含已注册工具名与参数说明。
+    """
+
     @register_tool
     def prompt_tool(namespace: str) -> str:
         """Check namespace status."""
@@ -169,6 +189,11 @@ def test_call_tool_execution_error() -> None:
 
 
 def test_build_tools_prompt_with_filter() -> None:
+    """Verify build_tools_prompt respects the tool_filter set.
+
+    验证 build_tools_prompt 按 tool_filter 过滤工具列表。
+    """
+
     @register_tool
     def get_pod_status(namespace: str) -> str:
         """Get pod status."""
@@ -192,6 +217,11 @@ def test_build_tools_prompt_with_filter() -> None:
 
 
 def test_build_tools_prompt_filter_empty_set_returns_all() -> None:
+    """Verify empty tool_filter includes all registered tools.
+
+    验证空 tool_filter 时包含全部已注册工具。
+    """
+
     @register_tool
     def get_pod_status(namespace: str) -> str:
         """Get pod status."""

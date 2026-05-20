@@ -27,16 +27,31 @@ def store_with_collection(store):
 
 
 def test_ensure_collection_creates_collection(store):
+    """
+    Verify ensure collection creates collection.
+
+    验证：ensure collection creates collection。
+    """
     assert store.ensure_collection() is True
     # Second call should be idempotent
     assert store.ensure_collection() is True
 
 
 def test_collection_exists_after_creation(store_with_collection):
+    """
+    Verify collection exists after creation.
+
+    验证：collection exists after creation。
+    """
     assert store_with_collection.client.collection_exists(COLLECTION_NAME)
 
 
 def test_upsert_points_and_search(store_with_collection):
+    """
+    Verify upsert points and search.
+
+    验证：upsert points and search。
+    """
     v1 = [0.1] * 1024
     v2 = [-0.9] * 1024  # opposite direction to v1
     store_with_collection.upsert(
@@ -51,6 +66,11 @@ def test_upsert_points_and_search(store_with_collection):
 
 
 def test_upsert_with_sparse_vectors(store_with_collection):
+    """
+    Verify upsert with sparse vectors.
+
+    验证：upsert with sparse vectors。
+    """
     store_with_collection.upsert(
         ids=[1],
         dense_vectors=[[0.5] * 1024],
@@ -62,10 +82,20 @@ def test_upsert_with_sparse_vectors(store_with_collection):
 
 
 def test_search_returns_empty_on_empty_collection(store_with_collection):
+    """
+    Verify search returns empty on empty collection.
+
+    验证：search returns empty on empty collection。
+    """
     results = store_with_collection.search_dense(query_vector=[0.5] * 1024, limit=5)
     assert results == []
 
 
 def test_upsert_skips_empty_batch(store_with_collection):
     # Should not raise
+    """
+    Verify upsert skips empty batch.
+
+    验证：upsert skips empty batch。
+    """
     store_with_collection.upsert(ids=[], dense_vectors=[], payloads=[])

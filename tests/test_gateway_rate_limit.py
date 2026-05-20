@@ -34,6 +34,11 @@ class FakeRedis:
 
 @pytest.mark.anyio
 async def test_allows_requests_until_limit() -> None:
+    """
+    Verify allows requests until limit.
+
+    验证：allows requests until limit。
+    """
     redis = FakeRedis()
     limiter = RedisRateLimiter(redis=redis, limit=2, window_seconds=60)
     assert await limiter.check("client-a") == RateLimitResult(allowed=True, remaining=1)
@@ -42,6 +47,11 @@ async def test_allows_requests_until_limit() -> None:
 
 @pytest.mark.anyio
 async def test_blocks_after_limit() -> None:
+    """
+    Verify blocks after limit.
+
+    验证：blocks after limit。
+    """
     redis = FakeRedis()
     limiter = RedisRateLimiter(redis=redis, limit=1, window_seconds=60)
     assert (await limiter.check("client-a")).allowed is True
@@ -54,6 +64,11 @@ async def test_blocks_after_limit() -> None:
 async def test_ttl_set_atomically_with_every_incr() -> None:
     # 审查报告：原实现 incr 后只在 count==1 时 expire，两步间崩溃则 key 永不过期。
     # 新实现要求 incr_with_ttl 是单一原子调用 → 每次调用都会更新 TTL。
+    """
+    Verify ttl set atomically with every incr.
+
+    验证：ttl set atomically with every incr。
+    """
     redis = FakeRedis()
     limiter = RedisRateLimiter(redis=redis, limit=10, window_seconds=60)
     for _ in range(5):

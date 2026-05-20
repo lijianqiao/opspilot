@@ -9,6 +9,7 @@
 
 import pytest
 
+from opspilot.agent.confirmation import STORE
 from opspilot.agent.supervisor import run_supervisor
 
 
@@ -78,3 +79,28 @@ async def test_supervisor_unknown_intent_falls_back_to_react():
     # Even with unknown intent, should produce an answer via fallback
     answer = await run_supervisor("hello", llm)
     assert len(answer) > 0
+
+
+@pytest.mark.anyio
+async def test_supervisor_k8s_operator_propagates_confirmed_request_id():
+    """
+    Verify supervisor k8s operator propagates confirmed request id.
+
+    验证：supervisor k8s operator propagates confirmed request id。
+    """
+    raw = '{"deployment":"user-service","replicas":0}'
+    pc = STORE.request("kubectl_scale", raw)
+    assert STORE.confirm(pc.request_id, pc.token, actor="feishu:ou_42") is True
+    llm = FakeLLM(
+        [
+            "INTENT: k8s_operator",
+            "1. scale user-service",
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "DONE",
+        ]
+    )
+
+    answer = await run_supervisor("scale user-service to zero", llm, confirmed_request_id=pc.request_id)
+
+    assert "scaled:" in answer
+    assert STORE.is_confirmed(pc.request_id) is False

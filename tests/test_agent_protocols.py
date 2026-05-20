@@ -9,6 +9,11 @@
 
 
 def test_supports_chat_is_single_source() -> None:
+    """
+    Verify supports chat is single source.
+
+    验证：supports chat is single source。
+    """
     from opspilot.agent import alert_handler, langgraph_agent, plan_execute, react, supervisor
     from opspilot.agent.protocols import SupportsChat
 

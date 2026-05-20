@@ -14,6 +14,11 @@ from scripts.ci_eval_summary import render_markdown
 
 
 def test_render_markdown_summary(tmp_path: Path) -> None:
+    """
+    Verify render markdown summary.
+
+    验证：render markdown summary。
+    """
     path = tmp_path / "eval.json"
     path.write_text(
         json.dumps(

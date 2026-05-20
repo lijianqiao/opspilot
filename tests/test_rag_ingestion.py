@@ -11,6 +11,11 @@ from opspilot.rag.ingestion import chunk_markdown
 
 
 def test_chunk_markdown_splits_by_headings():
+    """
+    Verify chunk markdown splits by headings.
+
+    验证：chunk markdown splits by headings。
+    """
     doc = """# Title
 
 Overview text introducing the runbook purpose and scope.
@@ -36,6 +41,11 @@ that the operator should be aware of during diagnosis.
 
 
 def test_chunk_markdown_single_section():
+    """
+    Verify chunk markdown single section.
+
+    验证：chunk markdown single section。
+    """
     doc = "# Title\n\nJust one section."
     chunks = chunk_markdown(doc, source="single.md")
     assert len(chunks) == 1
@@ -43,6 +53,11 @@ def test_chunk_markdown_single_section():
 
 
 def test_chunk_markdown_handles_code_blocks():
+    """
+    Verify chunk markdown handles code blocks.
+
+    验证：chunk markdown handles code blocks。
+    """
     doc = """# Debug Guide
 
 This guide covers common debugging techniques for Kubernetes workloads.
@@ -70,10 +85,20 @@ Look for stack traces and error messages that indicate root cause.
 
 
 def test_chunk_markdown_empty_doc():
+    """
+    Verify chunk markdown empty doc.
+
+    验证：chunk markdown empty doc。
+    """
     chunks = chunk_markdown("", source="empty.md")
     assert chunks == []
 
 
 def test_chunk_markdown_whitespace_only():
+    """
+    Verify chunk markdown whitespace only.
+
+    验证：chunk markdown whitespace only。
+    """
     chunks = chunk_markdown("\n\n  \n", source="blank.md")
     assert chunks == []

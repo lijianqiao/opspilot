@@ -58,6 +58,7 @@ class AgentState(TypedDict):
 
     messages: Annotated[list[dict[str, str]], _append_messages]
     question: str
+    confirmed_request_id: str | None
     steps_taken: int
     max_steps: int
     tool_calls: int
@@ -121,6 +122,7 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
         parsed.action_input,
         calls=calls,
         max_calls=get_settings().agent_max_tool_calls,
+        confirmed_request_id=state.get("confirmed_request_id"),
     )
     return {
         "messages": [{"role": "user", "content": f"Observation: {result.observation}"}],
@@ -186,6 +188,7 @@ async def run_react_graph(
     llm: SupportsChat,
     max_steps: int = 5,
     tool_filter: set[str] | None = None,
+    confirmed_request_id: str | None = None,
 ) -> str:
     """Run the ReAct loop via LangGraph StateGraph.
     通过 LangGraph StateGraph 运行 ReAct 循环。
@@ -216,6 +219,7 @@ async def run_react_graph(
             {"role": "user", "content": question},
         ],
         "question": question,
+        "confirmed_request_id": confirmed_request_id,
         "steps_taken": 0,
         "max_steps": max_steps,
         "tool_calls": 0,
@@ -274,6 +278,7 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
                 {"role": "user", "content": question},
             ],
             "question": question,
+            "confirmed_request_id": None,
             "steps_taken": 0,
             "max_steps": max_steps,
             "tool_calls": 0,

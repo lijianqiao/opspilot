@@ -24,6 +24,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_dangerous_tool_is_blocked_not_executed() -> None:
+    """
+    Verify dangerous tool is blocked not executed.
+
+    验证：dangerous tool is blocked not executed。
+    """
     llm = FakeLLM(
         [
             'Thought: scale down\nAction: kubectl_scale\nAction Input: {"deployment": "user-service", "replicas": 0}',
@@ -38,6 +43,11 @@ async def test_dangerous_tool_is_blocked_not_executed() -> None:
 
 @pytest.mark.anyio
 async def test_tool_call_cap_stops_runaway_loop() -> None:
+    """
+    Verify tool call cap stops runaway loop.
+
+    验证：tool call cap stops runaway loop。
+    """
     llm = FakeLLM(["Action: kubectl_get\nAction Input: pods"] * 30)
     answer = await run_react_graph("loop", llm, max_steps=50)
     assert "工具调用次数已达上限" in answer or "达到最大推理步数" in answer
@@ -46,6 +56,11 @@ async def test_tool_call_cap_stops_runaway_loop() -> None:
 
 @pytest.mark.anyio
 async def test_observation_is_redacted() -> None:
+    """
+    Verify observation is redacted.
+
+    验证：observation is redacted。
+    """
     llm = FakeLLM(
         [
             "Action: leaky_tool\nAction Input: x",

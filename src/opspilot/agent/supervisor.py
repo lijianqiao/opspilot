@@ -51,6 +51,7 @@ class SupervisorState(TypedDict):
     """
 
     question: str
+    confirmed_request_id: str | None
     intent: str
     final_answer: str
 
@@ -105,7 +106,12 @@ async def log_analyzer_node(state: SupervisorState) -> dict[str, Any]:
         State update with final_answer from the sub-agent.
             含子智能体 final_answer 的状态更新。
     """
-    answer = await run_react_graph(state["question"], _llm(), tool_filter=_LOG_ANALYZER_TOOLS)
+    answer = await run_react_graph(
+        state["question"],
+        _llm(),
+        tool_filter=_LOG_ANALYZER_TOOLS,
+        confirmed_request_id=state.get("confirmed_request_id"),
+    )
     return {"final_answer": answer}
 
 
@@ -123,7 +129,12 @@ async def k8s_operator_node(state: SupervisorState) -> dict[str, Any]:
     """
     from opspilot.agent.plan_execute import run_plan_execute
 
-    answer = await run_plan_execute(state["question"], _llm(), tool_filter=_K8S_OPERATOR_TOOLS)
+    answer = await run_plan_execute(
+        state["question"],
+        _llm(),
+        tool_filter=_K8S_OPERATOR_TOOLS,
+        confirmed_request_id=state.get("confirmed_request_id"),
+    )
     return {"final_answer": answer}
 
 
@@ -139,7 +150,12 @@ async def generic_react_node(state: SupervisorState) -> dict[str, Any]:
         State update with final_answer from ReAct.
             含 ReAct 返回的 final_answer 的状态更新。
     """
-    answer = await run_react_graph(state["question"], _llm(), tool_filter=_GENERIC_TOOLS)
+    answer = await run_react_graph(
+        state["question"],
+        _llm(),
+        tool_filter=_GENERIC_TOOLS,
+        confirmed_request_id=state.get("confirmed_request_id"),
+    )
     return {"final_answer": answer}
 
 
@@ -177,7 +193,7 @@ def _build_supervisor_graph() -> Any:
 _compiled_supervisor = _build_supervisor_graph()
 
 
-async def run_supervisor(question: str, llm: SupportsChat) -> str:
+async def run_supervisor(question: str, llm: SupportsChat, confirmed_request_id: str | None = None) -> str:
     """Run supervisor: classify intent then dispatch to a sub-agent.
     运行监督者：分类意图后分派到对应子智能体。
 
@@ -194,6 +210,11 @@ async def run_supervisor(question: str, llm: SupportsChat) -> str:
             子智能体返回的最终答案文本。
     """
     _current_llm.set(llm)
-    init: dict[str, Any] = {"question": question, "intent": "", "final_answer": ""}
+    init: dict[str, Any] = {
+        "question": question,
+        "confirmed_request_id": confirmed_request_id,
+        "intent": "",
+        "final_answer": "",
+    }
     result = await _compiled_supervisor.ainvoke(init, config={"recursion_limit": 50})
     return result.get("final_answer", "") or "未能得到最终答案。"

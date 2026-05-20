@@ -9,6 +9,11 @@
 
 
 def test_run_react_not_exported_from_package() -> None:
+    """
+    Verify run react not exported from package.
+
+    验证：run react not exported from package。
+    """
     import opspilot.agent as agent_pkg
 
     assert "run_react" not in agent_pkg.__all__
@@ -16,6 +21,11 @@ def test_run_react_not_exported_from_package() -> None:
 
 
 def test_run_react_graph_still_exported() -> None:
+    """
+    Verify run react graph still exported.
+
+    验证：run react graph still exported。
+    """
     from opspilot.agent import run_react_graph
 
     assert callable(run_react_graph)

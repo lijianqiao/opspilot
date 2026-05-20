@@ -25,6 +25,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_handle_alert_diagnoses_crashloop():
+    """
+    Verify handle alert diagnoses crashloop.
+
+    验证：handle alert diagnoses crashloop。
+    """
     fixture = Path("fixtures/alertmanager_webhook.json").read_text("utf-8")
     payload = json.loads(fixture)
 
@@ -41,6 +46,11 @@ async def test_handle_alert_diagnoses_crashloop():
 
 @pytest.mark.anyio
 async def test_handle_alert_includes_runbook():
+    """
+    Verify handle alert includes runbook.
+
+    验证：handle alert includes runbook。
+    """
     fixture = Path("fixtures/alertmanager_webhook.json").read_text("utf-8")
     payload = json.loads(fixture)
 

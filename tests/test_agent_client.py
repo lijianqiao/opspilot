@@ -18,6 +18,11 @@ from opspilot.entrypoints.agent_client import AgentClient
 @pytest.mark.anyio
 @respx.mock
 async def test_ask_posts_with_bearer() -> None:
+    """
+    AgentClient POST /ask sends Authorization Bearer header.
+
+    AgentClient 调用 POST /ask 时应携带 Bearer 鉴权头。
+    """
     route = respx.post("http://agent-core:8000/ask").mock(return_value=httpx.Response(200, json={"answer": "ok"}))
     settings = Settings(
         agent_core_url="http://agent-core:8000",
@@ -33,7 +38,12 @@ async def test_ask_posts_with_bearer() -> None:
 @pytest.mark.anyio
 @respx.mock
 async def test_get_pending() -> None:
-    respx.get("http://agent-core:8000/channels/pending/rid1").mock(
+    """
+    AgentClient fetches internal pending confirmation including token.
+
+    AgentClient 应能通过内部接口获取含 token 的待确认记录。
+    """
+    respx.get("http://agent-core:8000/internal/channels/pending/rid1").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -44,9 +54,10 @@ async def test_get_pending() -> None:
             },
         )
     )
-    settings = Settings(agent_core_url="http://agent-core:8000", api_auth_token="tok")
+    settings = Settings(agent_core_url="http://agent-core:8000", api_auth_token="tok", channel_internal_token="chan")
     client = AgentClient(settings)
     pc = await client.get_pending("rid1")
     assert pc is not None
     assert pc.token == "sec"
+    assert respx.calls.last.request.headers["authorization"] == "Bearer chan"
     await client.aclose()

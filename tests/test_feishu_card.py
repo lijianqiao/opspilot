@@ -13,6 +13,11 @@ from opspilot.entrypoints.feishu_card import build_confirm_card, confirm_from_ca
 
 
 def test_build_confirm_card_returns_valid_card_json() -> None:
+    """
+    Verify build confirm card returns valid card json.
+
+    验证：build confirm card returns valid card json。
+    """
     card = build_confirm_card("req_abc", "tok_xyz", "kubectl_scale", '{"deployment":"user-service","replicas":0}')
     data = json.loads(card)
     assert "elements" in data  # Feishu card message structure
@@ -20,6 +25,11 @@ def test_build_confirm_card_returns_valid_card_json() -> None:
 
 
 def test_build_confirm_card_buttons_carry_request_id_and_token() -> None:
+    """
+    Verify build confirm card buttons carry request id and token.
+
+    验证：build confirm card buttons carry request id and token。
+    """
     card = json.loads(build_confirm_card("req_abc", "tok_xyz", "kubectl_scale", "in"))
     actions = next(el for el in card["elements"] if el.get("tag") == "action")
     confirm_button = next(b for b in actions["actions"] if "primary" in b.get("type", ""))
@@ -34,6 +44,11 @@ def test_build_confirm_card_buttons_carry_request_id_and_token() -> None:
 
 
 def test_confirm_from_card_authorizes_via_store() -> None:
+    """
+    Verify confirm from card authorizes via store.
+
+    验证：confirm from card authorizes via store。
+    """
     from opspilot.agent.confirmation import ConfirmationStore
 
     store = ConfirmationStore(300)
@@ -43,6 +58,11 @@ def test_confirm_from_card_authorizes_via_store() -> None:
 
 
 def test_confirm_from_card_wrong_token_rejected() -> None:
+    """
+    Verify confirm from card wrong token rejected.
+
+    验证：confirm from card wrong token rejected。
+    """
     from opspilot.agent.confirmation import ConfirmationStore
 
     store = ConfirmationStore(300)
@@ -54,6 +74,11 @@ def test_confirm_from_card_wrong_token_rejected() -> None:
 def test_old_pending_api_removed() -> None:
     # 旧的进程内 _pending_confirmations / register_pending / consume_confirmation
     # 已迁到 ConfirmationStore（带 TTL + 一次性 + 防重放），不再暴露
+    """
+    Verify old pending api removed.
+
+    验证：old pending api removed。
+    """
     import opspilot.entrypoints.feishu_card as fc
 
     assert not hasattr(fc, "_pending_confirmations")

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from opspilot.agent.confirmation import STORE
 from opspilot.agent.langgraph_agent import run_react_graph
 
 
@@ -28,6 +29,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_graph_calls_tool_then_returns_final_answer() -> None:
+    """
+    Verify graph calls tool then returns final answer.
+
+    验证：graph calls tool then returns final answer。
+    """
     llm = FakeLLM(
         [
             "Thought: 查一下\nAction: get_pod_status\nAction Input: default",
@@ -41,6 +47,11 @@ async def test_graph_calls_tool_then_returns_final_answer() -> None:
 
 @pytest.mark.anyio
 async def test_graph_unknown_tool_is_reported() -> None:
+    """
+    Verify graph unknown tool is reported.
+
+    验证：graph unknown tool is reported。
+    """
     llm = FakeLLM(
         [
             "Action: nonexistent_tool\nAction Input: x",
@@ -55,6 +66,11 @@ async def test_graph_unknown_tool_is_reported() -> None:
 
 @pytest.mark.anyio
 async def test_graph_stops_at_max_steps() -> None:
+    """
+    Verify graph stops at max steps.
+
+    验证：graph stops at max steps。
+    """
     llm = FakeLLM(["Action: get_pod_status\nAction Input: default"] * 10)
     answer = await run_react_graph("q", llm, max_steps=3)
     assert "最大推理步数" in answer
@@ -63,6 +79,11 @@ async def test_graph_stops_at_max_steps() -> None:
 
 @pytest.mark.anyio
 async def test_graph_json_action_input() -> None:
+    """
+    Verify graph json action input.
+
+    验证：graph json action input。
+    """
     llm = FakeLLM(
         [
             'Thought: 查日志\nAction: query_loki\nAction Input: {"query": "error"}',
@@ -90,3 +111,39 @@ async def test_graph_matches_handwritten_behavior() -> None:
     answer_hand = await run_react("default pod 状态", llm1)
     answer_graph = await run_react_graph("default pod 状态", llm2)
     assert answer_hand == answer_graph
+
+
+@pytest.mark.anyio
+async def test_graph_confirmed_request_executes_once() -> None:
+    """
+    Verify graph confirmed request executes once.
+
+    验证：graph confirmed request executes once。
+    """
+    raw = '{"deployment":"user-service","replicas":0}'
+    pc = STORE.request("kubectl_scale", raw)
+    assert STORE.confirm(pc.request_id, pc.token, actor="feishu:ou_42") is True
+
+    llm = FakeLLM(
+        [
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "Final Answer: scaled",
+        ]
+    )
+    answer = await run_react_graph("scale user-service to zero", llm, confirmed_request_id=pc.request_id)
+
+    assert "scaled" in answer
+    assert "scaled" in llm.calls[1][-1]["content"]
+    assert STORE.is_confirmed(pc.request_id) is False
+
+    llm_reuse = FakeLLM(
+        [
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "Final Answer: blocked",
+        ]
+    )
+    await run_react_graph("scale user-service to zero", llm_reuse, confirmed_request_id=pc.request_id)
+
+    observation = llm_reuse.calls[1][-1]["content"]
+    assert "request_id=" in observation
+    assert "scaled:" not in observation

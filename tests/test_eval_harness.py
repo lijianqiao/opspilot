@@ -14,6 +14,11 @@ from opspilot.eval.harness import EvalResult, run_all
 
 
 def test_there_are_fifteen_cases() -> None:
+    """
+    Verify there are fifteen cases.
+
+    验证：there are fifteen cases。
+    """
     assert len(CASES) == 18
     for c in CASES:
         assert c.question
@@ -22,6 +27,11 @@ def test_there_are_fifteen_cases() -> None:
 
 @pytest.mark.anyio
 async def test_run_all_scores_three_metrics() -> None:
+    """
+    Verify run all scores three metrics.
+
+    验证：run all scores three metrics。
+    """
     results = await run_all()
     assert len(results) == 18
     for r in results:

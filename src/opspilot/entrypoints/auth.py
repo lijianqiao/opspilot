@@ -42,6 +42,29 @@ async def require_bearer(authorization: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+async def require_channel_internal_bearer(authorization: str = Header(default="")) -> None:
+    """Validate the internal channel-adapter Bearer token.
+    校验渠道内部认证的 Bearer 令牌。
+
+    Fail-closed: empty OPSPILOT_CHANNEL_INTERNAL_TOKEN → 503; bad/missing header → 401.
+    未配置 OPSPILOT_CHANNEL_INTERNAL_TOKEN 时返回 503；缺失或错误令牌返回 401。
+
+    Args:
+        authorization: Raw Authorization header value.
+            Authorization 请求头原始值。
+
+    Raises:
+        HTTPException: 503 if auth not configured, 401 if unauthorized.
+            未配置鉴权时 503，未授权时 401。
+    """
+    token = get_settings().channel_internal_token
+    if not token:
+        raise HTTPException(status_code=503, detail="channel internal auth not configured")
+    expected = f"Bearer {token}"
+    if not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
 def verify_alertmanager_signature(raw_body: bytes, signature: str) -> None:
     """Verify Alertmanager webhook HMAC-SHA256(body, secret) signature.
 

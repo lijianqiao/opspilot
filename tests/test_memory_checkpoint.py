@@ -26,6 +26,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_checkpoint_preserves_message_history() -> None:
+    """
+    Verify checkpoint preserves message history.
+
+    验证：checkpoint preserves message history。
+    """
     from langgraph.checkpoint.memory import InMemorySaver
 
     run = build_checkpointed_runner(InMemorySaver())
@@ -65,6 +70,11 @@ async def test_checkpoint_preserves_message_history() -> None:
 )
 @pytest.mark.anyio
 async def test_postgres_checkpointer_smoke() -> None:
+    """
+    Verify postgres checkpointer smoke.
+
+    验证：postgres checkpointer smoke。
+    """
     from opspilot.agent.langgraph_agent import build_postgres_runner
 
     run, cm = build_postgres_runner(os.environ["OPSPILOT_PG_DSN"])

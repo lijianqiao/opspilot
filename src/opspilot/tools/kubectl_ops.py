@@ -17,6 +17,11 @@ from opspilot.tools.fixtures_path import (
     read_fixture_json,
     use_mock_tools,
 )
+from opspilot.tools.policy import (
+    kubectl_describe_kind,
+    normalize_kubectl_resource,
+    reject_kubectl_read_resource,
+)
 from opspilot.tools.registry import register_tool
 
 
@@ -35,7 +40,12 @@ def kubectl_get(resource: str, namespace: str = "default") -> str:
         Tabular listing or unsupported-resource message.
             表格化列表或不支持资源类型的提示。
     """
-    if resource == "pods":
+    rejection = reject_kubectl_read_resource(resource)
+    if rejection is not None:
+        return rejection
+
+    resource_kind = normalize_kubectl_resource(resource)
+    if resource_kind in {"pod", "pods"}:
         if not use_mock_tools():
             return kubectl_get_pods_real(namespace)
         raw = read_fixture_json("kubectl_pods.json")
@@ -66,12 +76,17 @@ def kubectl_describe(resource: str, name: str, namespace: str = "default") -> st
         Formatted describe output or not-found message.
             格式化的 describe 输出或未找到提示。
     """
+    rejection = reject_kubectl_read_resource(resource)
+    if rejection is not None:
+        return rejection
+
+    resource_kind = kubectl_describe_kind(resource)
     if not use_mock_tools():
         return kubectl_describe_real(resource, name, namespace)
     raw = read_fixture_json("kubectl_describe.json")
     assert isinstance(raw, dict)
     for item in raw["resources"]:
-        if item["kind"] == resource and item["name"] == name and item["namespace"] == namespace:
+        if item["kind"] == resource_kind and item["name"] == name and item["namespace"] == namespace:
             parts = [
                 f"Name: {item['name']}",
                 f"Namespace: {item['namespace']}",

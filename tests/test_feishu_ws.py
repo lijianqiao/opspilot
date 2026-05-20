@@ -19,6 +19,12 @@ from opspilot.entrypoints.feishu_ws import (
 
 @pytest.mark.anyio
 async def test_handle_question_delegates_and_trims() -> None:
+    """
+    Verify handle question delegates and trims.
+
+    验证：handle question delegates and trims。
+    """
+
     async def agent(text: str) -> str:
         return f"answered: {text}"
 
@@ -27,6 +33,12 @@ async def test_handle_question_delegates_and_trims() -> None:
 
 @pytest.mark.anyio
 async def test_handle_question_rejects_empty() -> None:
+    """
+    Verify handle question rejects empty.
+
+    验证：handle question rejects empty。
+    """
+
     async def agent(text: str) -> str:
         raise AssertionError("空输入不应调用 agent")
 
@@ -37,6 +49,12 @@ async def test_handle_question_rejects_empty() -> None:
 async def test_handle_question_redacts_agent_failure_detail() -> None:
     # 审查报告 feishu_ws:46-47：原实现 f"Error: {exc}" 把异常字符串直传给用户，
     # 泄露 DSN/堆栈/密钥。新实现：固定脱敏文案，详情仅写日志。
+    """
+    Verify handle question redacts agent failure detail.
+
+    验证：handle question redacts agent failure detail。
+    """
+
     async def boom(text: str) -> str:
         raise RuntimeError("LLM connection refused")
 
@@ -47,6 +65,12 @@ async def test_handle_question_redacts_agent_failure_detail() -> None:
 
 @pytest.mark.anyio
 async def test_handle_question_does_not_leak_dsn_or_secrets() -> None:
+    """
+    Verify handle question does not leak dsn or secrets.
+
+    验证：handle question does not leak dsn or secrets。
+    """
+
     async def boom(text: str) -> str:
         raise RuntimeError("postgresql://opspilot:opspilot@db:5432 connect failed; api_key=sk-LEAK")
 
@@ -61,6 +85,12 @@ async def test_handle_question_does_not_leak_dsn_or_secrets() -> None:
 async def test_bare_anyio_run_fails_inside_running_loop() -> None:
     # Reproduce root cause: lark WS callback runs on a thread with an
     # existing event loop, so anyio.run() raises RuntimeError.
+    """
+    Verify bare anyio run fails inside running loop.
+
+    验证：bare anyio run fails inside running loop。
+    """
+
     async def agent(text: str) -> str:
         return text
 
@@ -71,6 +101,12 @@ async def test_bare_anyio_run_fails_inside_running_loop() -> None:
 @pytest.mark.anyio
 async def test_run_blocking_works_inside_running_loop() -> None:
     # Same running-loop environment; _run_blocking must succeed.
+    """
+    Verify run blocking works inside running loop.
+
+    验证：run blocking works inside running loop。
+    """
+
     async def agent(text: str) -> str:
         return f"answered: {text}"
 
@@ -79,6 +115,12 @@ async def test_run_blocking_works_inside_running_loop() -> None:
 
 @pytest.mark.anyio
 async def test_run_blocking_returns_redacted_message_on_agent_error() -> None:
+    """
+    Verify run blocking returns redacted message on agent error.
+
+    验证：run blocking returns redacted message on agent error。
+    """
+
     async def boom(text: str) -> str:
         raise ValueError("agent failed with secret=sk-XYZ")
 
@@ -91,48 +133,88 @@ async def test_run_blocking_returns_redacted_message_on_agent_error() -> None:
 
 
 def test_select_agent_plan_prefix():
+    """
+    Verify select agent plan prefix.
+
+    验证：select agent plan prefix。
+    """
     text, use_plan = _select_agent("规划：查看 pod")
     assert use_plan is True
     assert text == "查看 pod"
 
 
 def test_select_agent_plan_prefix_half_width():
+    """
+    Verify select agent plan prefix half width.
+
+    验证：select agent plan prefix half width。
+    """
     text, use_plan = _select_agent("规划:查看 pod")
     assert use_plan is True
     assert text == "查看 pod"
 
 
 def test_select_agent_slash_plan():
+    """
+    Verify select agent slash plan.
+
+    验证：select agent slash plan。
+    """
     text, use_plan = _select_agent("/plan 查看 pod")
     assert use_plan is True
     assert text == "查看 pod"
 
 
 def test_select_agent_no_prefix():
+    """
+    Verify select agent no prefix.
+
+    验证：select agent no prefix。
+    """
     text, use_plan = _select_agent("查看 pod")
     assert use_plan is False
     assert text == "查看 pod"
 
 
 def test_select_agent_strips_feishu_mention():
+    """
+    Verify select agent strips feishu mention.
+
+    验证：select agent strips feishu mention。
+    """
     text, use_plan = _select_agent("@_user_1 规划：查看 pod")
     assert use_plan is True
     assert text == "查看 pod"
 
 
 def test_select_agent_strips_mention_no_plan():
+    """
+    Verify select agent strips mention no plan.
+
+    验证：select agent strips mention no plan。
+    """
     text, use_plan = _select_agent("@_user_1 查看 pod")
     assert use_plan is False
     assert text == "查看 pod"
 
 
 def test_select_agent_routes_normal_message_to_default():
+    """
+    Verify select agent routes normal message to default.
+
+    验证：select agent routes normal message to default。
+    """
     text, use_plan = _select_agent("查看 pod 状态")
     assert use_plan is False
     assert text == "查看 pod 状态"
 
 
 def test_select_agent_preserves_plan_prefix_behavior():
+    """
+    Verify select agent preserves plan prefix behavior.
+
+    验证：select agent preserves plan prefix behavior。
+    """
     text, use_plan = _select_agent("规划：重启 order-service")
     assert use_plan is True
     assert text == "重启 order-service"

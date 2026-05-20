@@ -15,12 +15,25 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 
+from opspilot.entrypoints.body_limits import (
+    MAX_GATEWAY_BODY_BYTES,
+    MAX_GATEWAY_CONTENT_CHARS,
+    content_length_exceeds,
+    read_limited_json,
+    require_json_object,
+    too_large_response,
+)
 from opspilot.gateway.config import GatewayProvider, GatewaySettings
 from opspilot.gateway.metrics import build_registry, render_metrics
 from opspilot.gateway.providers import ProviderRouter
 
 
-async def _proxy_chat(provider: GatewayProvider, payload: dict[str, Any], timeout: float) -> httpx.Response:
+async def _proxy_chat(
+    provider: GatewayProvider,
+    payload: dict[str, Any],
+    timeout: float,
+    http_client: httpx.AsyncClient | None = None,
+) -> httpx.Response:
     """POST chat/completions to one upstream provider.
 
     向单个上游 Provider 转发 chat/completions 请求。
@@ -37,6 +50,12 @@ async def _proxy_chat(provider: GatewayProvider, payload: dict[str, Any], timeou
         Raw upstream HTTP response.
             上游原始 HTTP 响应。
     """
+    if http_client is not None:
+        return await http_client.post(
+            f"{provider.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {provider.api_key}"},
+            json=payload,
+        )
     async with httpx.AsyncClient(timeout=timeout) as client:
         return await client.post(
             f"{provider.base_url}/chat/completions",
@@ -46,7 +65,12 @@ async def _proxy_chat(provider: GatewayProvider, payload: dict[str, Any], timeou
         )
 
 
-async def _proxy_or_none(provider: GatewayProvider, payload: dict[str, Any], timeout: float) -> httpx.Response | None:
+async def _proxy_or_none(
+    provider: GatewayProvider,
+    payload: dict[str, Any],
+    timeout: float,
+    http_client: httpx.AsyncClient | None = None,
+) -> httpx.Response | None:
     """Call _proxy_chat; return None on transport-level failure (caller may fallback).
 
     调用 _proxy_chat；传输层失败时返回 None（由调用方触发降级）。
@@ -64,7 +88,7 @@ async def _proxy_or_none(provider: GatewayProvider, payload: dict[str, Any], tim
             上游响应；传输错误或超时时为 None。
     """
     try:
-        return await _proxy_chat(provider, payload, timeout)
+        return await _proxy_chat(provider, payload, timeout, http_client=http_client)
     except (httpx.TransportError, httpx.TimeoutException):
         return None
 
@@ -90,7 +114,33 @@ def _check_gateway_bearer(authorization: str, expected_token: str) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
-def create_app(settings: GatewaySettings | None = None, limiter: Any | None = None) -> FastAPI:
+def _validate_chat_payload_size(payload: dict[str, Any]) -> None:
+    """Validate the chat payload size.
+    验证对话补全请求体大小。
+
+    Args:
+        payload: OpenAI-compatible request JSON body.
+            OpenAI 兼容的请求 JSON 体。
+
+    Raises:
+        HTTPException: 413 if the payload is too large.
+            请求体过大时 413。
+    """
+    messages = payload.get("messages", [])
+    if not isinstance(messages, list):
+        raise HTTPException(status_code=422, detail="messages must be a list")
+    if any(not isinstance(message, dict) for message in messages):
+        raise HTTPException(status_code=422, detail="messages must contain objects")
+    total = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
+    if total > MAX_GATEWAY_CONTENT_CHARS:
+        raise HTTPException(status_code=413, detail="payload too large")
+
+
+def create_app(
+    settings: GatewaySettings | None = None,
+    limiter: Any | None = None,
+    http_client: httpx.AsyncClient | None = None,
+) -> FastAPI:
     """Build the FastAPI gateway application with routes and middleware wiring.
 
     构建 FastAPI 网关应用（注册路由、指标与可选限流）。
@@ -112,10 +162,33 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
 
     app = FastAPI(title="OpsPilot LLM Gateway")
 
+    @app.middleware("http")
+    async def reject_large_bodies(request: Request, call_next):  # type: ignore[no-untyped-def]
+        """Reject requests with overly large bodies.
+        拒绝请求体过大的请求。
+
+        Args:
+            request: Incoming HTTP request.
+                入站 HTTP 请求。
+            call_next: Next middleware function.
+                下一个中间件函数。
+
+        Returns:
+            Response or awaitable of Response.
+                响应或响应等待对象。
+        """
+        if request.url.path == "/v1/chat/completions" and content_length_exceeds(request, MAX_GATEWAY_BODY_BYTES):
+            return too_large_response()
+        return await call_next(request)
+
     @app.get("/metrics")
     async def metrics() -> Response:
         """Expose Prometheus metrics for scraping.
+        暴露 Prometheus 指标供抓取。
 
+        Returns:
+            Response with Prometheus metrics.
+                含 Prometheus 指标的响应。
         暴露 Prometheus 指标供抓取。
         """
         return Response(content=render_metrics(registry), media_type="text/plain; version=0.0.4")
@@ -144,10 +217,13 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
             if not limit.allowed:
                 raise HTTPException(status_code=429, detail="rate limit exceeded")
 
-        payload = await request.json()
+        payload = require_json_object(await read_limited_json(request, MAX_GATEWAY_BODY_BYTES))
+        _validate_chat_payload_size(payload)
         provider = router.select()
         with request_latency.labels(provider=provider.name).time():
-            upstream = await _proxy_or_none(provider, payload, settings.provider_timeout_seconds)
+            upstream = await _proxy_or_none(
+                provider, payload, settings.provider_timeout_seconds, http_client=http_client
+            )
 
         if upstream is not None:
             request_counter.labels(provider=provider.name, status=str(upstream.status_code)).inc()
@@ -158,7 +234,9 @@ def create_app(settings: GatewaySettings | None = None, limiter: Any | None = No
             fallback = router.fallback_after(provider)
             if fallback is not None:
                 with request_latency.labels(provider=fallback.name).time():
-                    fb_resp = await _proxy_or_none(fallback, payload, settings.provider_timeout_seconds)
+                    fb_resp = await _proxy_or_none(
+                        fallback, payload, settings.provider_timeout_seconds, http_client=http_client
+                    )
                 if fb_resp is not None:
                     request_counter.labels(provider=fallback.name, status=str(fb_resp.status_code)).inc()
                     upstream = fb_resp

@@ -18,6 +18,10 @@ from opspilot.tools.fixtures_path import get_fixtures_dir, read_fixture_json, us
 
 @pytest.fixture(autouse=True)
 def _clear_caches() -> Iterator[None]:
+    """Clear Settings and fixtures_dir caches around each test.
+
+    每个测试前后清空 Settings 与 fixtures_dir 缓存。
+    """
     get_settings.cache_clear()
     get_fixtures_dir.cache_clear()
     yield
@@ -26,12 +30,22 @@ def _clear_caches() -> Iterator[None]:
 
 
 def test_default_fixtures_dir_points_to_repo_fixtures() -> None:
+    """
+    Verify default fixtures dir points to repo fixtures.
+
+    验证：default fixtures dir points to repo fixtures。
+    """
     root = Path(__file__).resolve().parents[1]
     assert get_fixtures_dir() == (root / "fixtures").resolve()
     assert (get_fixtures_dir() / "kubectl_pods.json").is_file()
 
 
 def test_fixtures_dir_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """
+    Verify fixtures dir override.
+
+    验证：fixtures dir override。
+    """
     custom = tmp_path / "my_fixtures"
     custom.mkdir()
     (custom / "kubectl_pods.json").write_text('{"pods": []}', encoding="utf-8")
@@ -42,10 +56,20 @@ def test_fixtures_dir_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
 
 def test_use_mock_tools_default_true() -> None:
+    """
+    Verify use mock tools default true.
+
+    验证：use mock tools default true。
+    """
     assert Settings().use_mock_tools is True
 
 
 def test_read_fixture_json_missing_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify read fixture json missing raises.
+
+    验证：read fixture json missing raises。
+    """
     monkeypatch.setenv("OPSPILOT_FIXTURES_DIR", str(tmp_path))
     get_settings.cache_clear()
     get_fixtures_dir.cache_clear()
@@ -54,12 +78,22 @@ def test_read_fixture_json_missing_raises(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_use_mock_tools_env_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify use mock tools env false.
+
+    验证：use mock tools env false。
+    """
     monkeypatch.setenv("OPSPILOT_USE_MOCK_TOOLS", "false")
     get_settings.cache_clear()
     assert use_mock_tools() is False
 
 
 def test_kubectl_get_pods_mock_from_fixture() -> None:
+    """
+    Verify kubectl get pods mock from fixture.
+
+    验证：kubectl get pods mock from fixture。
+    """
     from opspilot.tools.kubectl_ops import kubectl_get
 
     out = kubectl_get("pods", namespace="default")

@@ -13,12 +13,17 @@ import respx
 from tenacity import wait_none
 
 from opspilot.config import Settings
-from opspilot.llm.client import CircuitOpenError, LLMClient
+from opspilot.llm.client import CircuitBreakerState, CircuitOpenError, LLMClient
 
 
 @pytest.mark.anyio
 @respx.mock
 async def test_chat_posts_openai_payload_and_parses_reply() -> None:
+    """
+    Verify chat posts openai payload and parses reply.
+
+    验证：chat posts openai payload and parses reply。
+    """
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
     route = respx.post("http://test/v1/chat/completions").mock(
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
@@ -41,6 +46,11 @@ async def test_chat_posts_openai_payload_and_parses_reply() -> None:
 @pytest.mark.anyio
 @respx.mock
 async def test_chat_retries_transient_5xx_then_succeeds() -> None:
+    """
+    Verify chat retries transient 5xx then succeeds.
+
+    验证：chat retries transient 5xx then succeeds。
+    """
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
     route = respx.post("http://test/v1/chat/completions").mock(
         side_effect=[
@@ -62,6 +72,11 @@ async def test_chat_retries_transient_5xx_then_succeeds() -> None:
 @respx.mock
 async def test_chat_does_not_retry_on_4xx() -> None:
     # python-anti-patterns: 4xx 是客户端错误，不应重试（auth/permission/bad request）
+    """
+    Verify chat does not retry on 4xx.
+
+    验证：chat does not retry on 4xx。
+    """
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
     route = respx.post("http://test/v1/chat/completions").mock(return_value=httpx.Response(401))
     client = LLMClient(settings)
@@ -76,6 +91,11 @@ async def test_chat_does_not_retry_on_4xx() -> None:
 @pytest.mark.anyio
 @respx.mock
 async def test_chat_retries_transport_error_then_succeeds() -> None:
+    """
+    Verify chat retries transport error then succeeds.
+
+    验证：chat retries transport error then succeeds。
+    """
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
     route = respx.post("http://test/v1/chat/completions").mock(
         side_effect=[
@@ -96,6 +116,11 @@ async def test_chat_retries_transport_error_then_succeeds() -> None:
 @respx.mock
 async def test_circuit_opens_after_consecutive_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     # 加速：测试用 wait_none() 跳过 tenacity 的 backoff
+    """
+    Verify circuit opens after consecutive failures.
+
+    验证：circuit opens after consecutive failures。
+    """
     monkeypatch.setattr("opspilot.llm.client._RETRY_WAIT", wait_none())
     route = respx.post("http://test/v1/chat/completions").mock(return_value=httpx.Response(500))
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
@@ -117,8 +142,41 @@ async def test_circuit_opens_after_consecutive_failures(monkeypatch: pytest.Monk
 
 @pytest.mark.anyio
 @respx.mock
+async def test_circuit_state_shared_between_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verify circuit state shared between clients.
+
+    验证：circuit state shared between clients。
+    """
+    monkeypatch.setattr("opspilot.llm.client._RETRY_WAIT", wait_none())
+    route = respx.post("http://test/v1/chat/completions").mock(return_value=httpx.Response(500))
+    settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")
+    breaker = CircuitBreakerState()
+    client1 = LLMClient(settings, breaker=breaker)
+    client2 = LLMClient(settings, breaker=breaker)
+    try:
+        for _ in range(3):
+            with pytest.raises(Exception):  # noqa: B017
+                await client1.chat([{"role": "user", "content": "x"}])
+
+        calls_before_open = route.call_count
+        with pytest.raises(CircuitOpenError):
+            await client2.chat([{"role": "user", "content": "x"}])
+        assert route.call_count == calls_before_open
+    finally:
+        await client1.aclose()
+        await client2.aclose()
+
+
+@pytest.mark.anyio
+@respx.mock
 async def test_circuit_half_open_probes_after_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
     # 加速 + 短 cooldown
+    """
+    Verify circuit half open probes after cooldown.
+
+    验证：circuit half open probes after cooldown。
+    """
     monkeypatch.setattr("opspilot.llm.client._RETRY_WAIT", wait_none())
     monkeypatch.setattr("opspilot.llm.client._CB_COOLDOWN_SECONDS", 0.05)
     settings = Settings(llm_base_url="http://test/v1", llm_model="m", llm_api_key="k")

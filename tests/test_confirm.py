@@ -13,6 +13,11 @@ from opspilot.tools.registry import get_registered_tools
 
 def test_confirm_tool_no_longer_self_authorizes() -> None:
     # 工具自身不再放行任何东西；它只产出"去人工通道确认"的指引
+    """
+    Verify confirm tool no longer self authorizes.
+
+    验证：confirm tool no longer self authorizes。
+    """
     out = confirm_dangerous_op("kubectl_scale user-service 0")
     assert "已确认" not in out
     # 应说明该操作进入待人工确认流程
@@ -22,6 +27,11 @@ def test_confirm_tool_no_longer_self_authorizes() -> None:
 
 def test_confirm_no_longer_accepts_token_param() -> None:
     # 旧 token 参数已删除：传入额外位置参数应 TypeError
+    """
+    Verify confirm no longer accepts token param.
+
+    验证：confirm no longer accepts token param。
+    """
     import pytest
 
     with pytest.raises(TypeError):
@@ -30,6 +40,11 @@ def test_confirm_no_longer_accepts_token_param() -> None:
 
 def test_confirm_token_constant_removed() -> None:
     # 静态明文 token 不再导出
+    """
+    Verify confirm token constant removed.
+
+    验证：confirm token constant removed。
+    """
     import opspilot.tools.confirm as confirm_mod
 
     assert not hasattr(confirm_mod, "CONFIRM_TOKEN")
@@ -37,4 +52,9 @@ def test_confirm_token_constant_removed() -> None:
 
 def test_confirm_registered_low_risk() -> None:
     # the confirmation tool itself must not be flagged dangerous
+    """
+    Verify confirm registered low risk.
+
+    验证：confirm registered low risk。
+    """
     assert get_registered_tools()["confirm_dangerous_op"].risk == "low"

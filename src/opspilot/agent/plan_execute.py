@@ -56,6 +56,7 @@ class PlanState(TypedDict):
     """
 
     question: str
+    confirmed_request_id: str | None
     plan: list[str]
     cursor: int
     results: Annotated[list[dict[str, str]], _append]
@@ -145,6 +146,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
             parsed.action_input,
             calls=calls,
             max_calls=get_settings().agent_max_tool_calls,
+            confirmed_request_id=state.get("confirmed_request_id"),
         )
         result = guarded.observation
     elif parsed.final is not None:
@@ -230,7 +232,11 @@ _compiled = _build_graph()
 
 
 async def run_plan_execute(
-    question: str, llm: SupportsChat, max_steps: int = 20, tool_filter: set[str] | None = None
+    question: str,
+    llm: SupportsChat,
+    max_steps: int = 20,
+    tool_filter: set[str] | None = None,
+    confirmed_request_id: str | None = None,
 ) -> str:
     """Run the Plan-Execute loop; API-shaped like run_react_graph().
     运行 Plan-Execute 循环；API 形态与 run_react_graph() 一致。
@@ -253,6 +259,7 @@ async def run_plan_execute(
     _pe_tool_filter.set(tool_filter)
     init: dict[str, Any] = {
         "question": question,
+        "confirmed_request_id": confirmed_request_id,
         "plan": [],
         "cursor": 0,
         "results": [],

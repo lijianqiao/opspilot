@@ -16,6 +16,11 @@ from opspilot.entrypoints.feishu_ws import _handle_via_agent_core
 
 @pytest.mark.anyio
 async def test_handle_via_agent_core_sends_card_when_request_id_in_answer() -> None:
+    """
+    Feishu adapter sends confirm card when answer contains request_id.
+
+    飞书适配器在回答含 request_id 时应发送确认卡片。
+    """
     mock_client = AsyncMock()
     mock_client.ask.return_value = "blocked request_id=abc123xyz"
     mock_client.get_pending.return_value = MagicMock(

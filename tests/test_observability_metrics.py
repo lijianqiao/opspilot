@@ -17,6 +17,11 @@ from opspilot.observability.metrics import (
 
 
 def test_metrics_render_prometheus_text() -> None:
+    """
+    Verify metrics render prometheus text.
+
+    验证：metrics render prometheus text。
+    """
     record_agent_request(endpoint="/ask", status="success")
     record_tool_call(tool="kubectl_get", status="success", duration_seconds=0.01)
     record_guardrail_block(tool="kubectl_scale")

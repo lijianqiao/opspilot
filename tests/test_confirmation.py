@@ -13,6 +13,11 @@ from opspilot.agent.confirmation import ConfirmationStore
 
 
 def test_request_creates_unpredictable_token() -> None:
+    """
+    Verify request creates unpredictable token.
+
+    验证：request creates unpredictable token。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     a = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
     b = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
@@ -23,6 +28,11 @@ def test_request_creates_unpredictable_token() -> None:
 
 
 def test_confirm_then_consume_allows_once() -> None:
+    """
+    Verify confirm then consume allows once.
+
+    验证：confirm then consume allows once。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", "x")
     assert store.is_confirmed(pc.request_id) is False
@@ -35,7 +45,44 @@ def test_confirm_then_consume_allows_once() -> None:
     assert store.consume(pc.request_id) is None
 
 
+def test_consume_if_matches_requires_original_tool_and_input() -> None:
+    """
+    Verify consume if matches requires original tool and input.
+
+    验证：consume if matches requires original tool and input。
+    """
+    store = ConfirmationStore(ttl_seconds=300)
+    pc = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
+    assert store.confirm(pc.request_id, pc.token, actor="feishu:ou_1") is True
+
+    assert store.consume_if_matches(pc.request_id, "kubectl_rollout_restart", '{"deployment":"x"}') is None
+    assert store.is_confirmed(pc.request_id) is True
+
+    assert store.consume_if_matches(pc.request_id, "kubectl_scale", '{"deployment":"x","replicas":0}') == "feishu:ou_1"
+    assert store.consume_if_matches(pc.request_id, "kubectl_scale", '{"deployment":"x","replicas":0}') is None
+
+
+def test_consume_if_matches_rejects_expired_confirmation() -> None:
+    """
+    Verify consume if matches rejects expired confirmation.
+
+    验证：consume if matches rejects expired confirmation。
+    """
+    store = ConfirmationStore(ttl_seconds=0)
+    pc = store.request("kubectl_scale", "x")
+    assert store.confirm(pc.request_id, pc.token, actor="feishu:ou_1") is True
+    time.sleep(0.05)
+
+    assert store.consume_if_matches(pc.request_id, "kubectl_scale", "x") is None
+    assert store.is_confirmed(pc.request_id) is False
+
+
 def test_wrong_token_rejected() -> None:
+    """
+    Verify wrong token rejected.
+
+    验证：wrong token rejected。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", "x")
     # LLM 猜测 token 必须失败
@@ -44,11 +91,21 @@ def test_wrong_token_rejected() -> None:
 
 
 def test_unknown_request_id_rejected() -> None:
+    """
+    Verify unknown request id rejected.
+
+    验证：unknown request id rejected。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     assert store.confirm("nonexistent", "anytoken", actor="x") is False
 
 
 def test_expired_request_rejected() -> None:
+    """
+    Verify expired request rejected.
+
+    验证：expired request rejected。
+    """
     store = ConfirmationStore(ttl_seconds=0)
     pc = store.request("kubectl_scale", "x")
     time.sleep(0.05)
@@ -59,6 +116,11 @@ def test_expired_request_rejected() -> None:
 def test_get_pending_returns_record_without_consuming() -> None:
     # 飞书 entrypoint 收到 guarded_call_tool 返回的 request_id 后，需要
     # 取出 token + tool + input 构造确认卡片；只读，不消费、不放行。
+    """
+    Verify get pending returns record without consuming.
+
+    验证：get pending returns record without consuming。
+    """
     store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", "x")
     fetched = store.get_pending(pc.request_id)

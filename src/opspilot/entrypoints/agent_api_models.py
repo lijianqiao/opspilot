@@ -9,15 +9,26 @@
 
 from pydantic import BaseModel, Field
 
+from opspilot.entrypoints.body_limits import MAX_AGENT_QUESTION_CHARS
+
 
 class AskRequest(BaseModel):
     """Request body for POST /ask.
 
     POST /ask 请求体。
+
+    Attributes:
+        question: User question text (1..MAX_AGENT_QUESTION_CHARS).
+            用户问题文本。
+        plan: Use Plan-Execute when True.
+            为 True 时使用 Plan-Execute。
+        confirmed_request_id: Resume after HITL confirm when set.
+            设置时在人工确认后继续执行。
     """
 
-    question: str
+    question: str = Field(min_length=1, max_length=MAX_AGENT_QUESTION_CHARS)
     plan: bool = False
+    confirmed_request_id: str | None = Field(default=None, max_length=128)
 
 
 class AskResponse(BaseModel):
@@ -30,14 +41,30 @@ class AskResponse(BaseModel):
 
 
 class PendingConfirmationView(BaseModel):
-    """Pending HITL confirmation exposed to channel adapters.
+    """Pending HITL confirmation exposed to channel adapters (no token).
 
-    暴露给渠道适配器的待确认危险操作视图。
+    暴露给渠道适配器的待确认危险操作视图（不含 token）。
+
+    Attributes:
+        request_id: Opaque confirmation id.
+            不透明确认 ID。
+        tool: Blocked tool name.
+            被拦截的工具名。
+        tool_input: Raw tool input snapshot.
+            工具输入快照。
     """
 
     request_id: str
     tool: str
     tool_input: str
+
+
+class PendingConfirmationInternalView(PendingConfirmationView):
+    """Internal pending HITL confirmation including the one-time token.
+
+    内部待确认危险操作视图，包含一次性 token。
+    """
+
     token: str
 
 

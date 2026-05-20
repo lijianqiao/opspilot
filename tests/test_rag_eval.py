@@ -23,6 +23,11 @@ def qa_dataset():
 
 
 def test_qa_dataset_has_all_required_fields(qa_dataset):
+    """
+    Verify qa dataset has all required fields.
+
+    验证：qa dataset has all required fields。
+    """
     for item in qa_dataset:
         assert "question" in item
         assert "reference" in item
@@ -31,6 +36,11 @@ def test_qa_dataset_has_all_required_fields(qa_dataset):
 
 
 def test_qa_dataset_questions_are_unique(qa_dataset):
+    """
+    Verify qa dataset questions are unique.
+
+    验证：qa dataset questions are unique。
+    """
     questions = [item["question"] for item in qa_dataset]
     assert len(questions) == len(set(questions))
 

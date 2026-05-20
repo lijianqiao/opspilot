@@ -9,6 +9,7 @@
 
 import pytest
 
+from opspilot.agent.confirmation import STORE
 from opspilot.agent.plan_execute import run_plan_execute
 
 
@@ -24,6 +25,11 @@ class FakeLLM:
 
 @pytest.mark.anyio
 async def test_planner_then_executes_each_step_then_final() -> None:
+    """
+    Verify planner then executes each step then final.
+
+    验证：planner then executes each step then final。
+    """
     llm = FakeLLM(
         [
             # Planner: numbered steps (2 steps)
@@ -45,6 +51,11 @@ async def test_planner_then_executes_each_step_then_final() -> None:
 @pytest.mark.anyio
 async def test_replan_can_request_more_steps() -> None:
     # Call order: planner, executor, replan(REPLAN), planner, executor, replan(DONE)
+    """
+    Verify replan can request more steps.
+
+    验证：replan can request more steps。
+    """
     llm = FakeLLM(
         [
             "1. 第一步",  # planner (cycle 1)
@@ -66,6 +77,11 @@ async def test_max_steps_guards_plan_execute() -> None:
     # after the 3rd executor run because steps_taken=3 >= max_steps.
     # run_plan_execute's fallback returns the "达到最大步数" message.
     # Total LLM calls: 3 planners + 3 executors + 2 replans = 8.
+    """
+    Verify max steps guards plan execute.
+
+    验证：max steps guards plan execute。
+    """
     action = "Action: kubectl_get\nAction Input: pods"
     llm = FakeLLM(
         ["1. 永远做不完"]  # planner (cycle 1)
@@ -80,3 +96,49 @@ async def test_max_steps_guards_plan_execute() -> None:
     )
     answer = await run_plan_execute("infinite", llm, max_steps=3)
     assert "达到最大" in answer
+
+
+@pytest.mark.anyio
+async def test_plan_execute_confirmed_request_executes_once() -> None:
+    """
+    Verify plan execute confirmed request executes once.
+
+    验证：plan execute confirmed request executes once。
+    """
+    raw = '{"deployment":"user-service","replicas":0}'
+    pc = STORE.request("kubectl_scale", raw)
+    assert STORE.confirm(pc.request_id, pc.token, actor="feishu:ou_42") is True
+
+    llm = FakeLLM(
+        [
+            "1. scale user-service",
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "DONE",
+        ]
+    )
+    answer = await run_plan_execute(
+        "scale user-service to zero",
+        llm,
+        max_steps=4,
+        confirmed_request_id=pc.request_id,
+    )
+
+    assert "scaled:" in answer
+    assert STORE.is_confirmed(pc.request_id) is False
+
+    llm_reuse = FakeLLM(
+        [
+            "1. scale user-service",
+            f"Action: kubectl_scale\nAction Input: {raw}",
+            "DONE",
+        ]
+    )
+    answer_reuse = await run_plan_execute(
+        "scale user-service to zero",
+        llm_reuse,
+        max_steps=4,
+        confirmed_request_id=pc.request_id,
+    )
+
+    assert "request_id=" in answer_reuse
+    assert "scaled:" not in answer_reuse
