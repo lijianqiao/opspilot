@@ -20,6 +20,7 @@ dependencies = [
     "fastembed>=0.5.0",
     "redis>=5.2.0",
     "prometheus-client>=0.21.0",
+    "tenacity>=9.1.4",
 ]
 
 [project.scripts]
