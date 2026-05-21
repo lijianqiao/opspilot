@@ -7,6 +7,7 @@
     测试人工确认 ConfirmationStore（TTL、一次性 token）。
 """
 
+import dataclasses
 import time
 
 from opspilot.agent.confirmation import ConfirmationStore
@@ -68,10 +69,18 @@ def test_consume_if_matches_rejects_expired_confirmation() -> None:
 
     验证：consume if matches rejects expired confirmation。
     """
-    store = ConfirmationStore(ttl_seconds=0)
+    # 用充足 TTL 让 confirm() 必定成功（CI 慢 runner 上 ttl_seconds=0 会触发
+    # request→confirm 间的 monotonic 时钟竞态）。confirm 成功后用 dataclasses.replace
+    # 把 expires_at 强制改成过去时刻，确定性触发过期路径，无 sleep 时序假设。
+    store = ConfirmationStore(ttl_seconds=300)
     pc = store.request("kubectl_scale", "x")
     assert store.confirm(pc.request_id, pc.token, actor="feishu:ou_1") is True
-    time.sleep(0.05)
+
+    # 直接将 pending 的 expires_at 改到 1 秒前 → consume_if_matches 走过期分支
+    with store._lock:
+        store._pending[pc.request_id] = dataclasses.replace(
+            store._pending[pc.request_id], expires_at=time.monotonic() - 1.0
+        )
 
     assert store.consume_if_matches(pc.request_id, "kubectl_scale", "x") is None
     assert store.is_confirmed(pc.request_id) is False
