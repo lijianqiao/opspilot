@@ -243,11 +243,16 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/
 
 **Mock 数据**：`.env` 保持 `OPSPILOT_USE_MOCK_TOOLS=true`（默认）。镜像已包含 `fixtures/`，compose 另挂载 `../fixtures:/app/fixtures:ro` 便于改数据后无需重建。若改为 `false`，`kubectl get/describe` 会调真实集群（需容器内 `kubectl` 与 kubeconfig 挂载）；Prometheus/Loki/写操作尚未接真 API。
 
-4. **危险操作（HITL）**  
-   - 触发需确认的工具（如 scale）后，回复文本中含 `request_id=...`  
-   - 机器人应**自动再发一张交互确认卡片**  
-   - 点击「确认」→ toast 显示已确认；**当前版本确认后需再发一条消息**才会继续执行，不会自动续跑  
+4. **危险操作（HITL）**
+   - 触发需确认的工具（如 scale）后，回复文本中含 `request_id=...`
+   - 机器人应**自动再发一张交互确认卡片**
+   - 点击「确认」→ toast 显示已确认；**当前版本确认后需再发一条消息**才会继续执行，不会自动续跑（见 [Q8](#q8-点击确认卡片后-agent-没有继续执行)）
    - 卡片回调经 `feishu-bot` → `POST /channels/feishu/card-action` → agent-core 内 `STORE.confirm`
+   - **确认有 channel 绑定（安全特性，非 bug）**：
+     - 确认权威绑定到**发起请求的同一个用户**（飞书 `open_id`）；另一个用户点击同一张卡片会被拒绝
+     - 若飞书 SDK 在卡片回调事件里暴露了 `chat_id`，会同时绑定到**同一个聊天**——把卡片转发到别的群再点击会被拒绝；SDK 未暴露 `chat_id` 时仅以 requester 为准
+     - 卡片 value 里携带的 `chat_id` **仅作显示/兼容回退用，不可作为信任来源**——真正校验的是飞书事件 payload 里的字段
+     - 你看到 toast「确认失败：请求已过期或无效」时，大概率是上述任一绑定不匹配（不是 token 错）；可看 `agent-core` 日志确认
 
 5. **排错顺序**  
    - 无回复：先看 `feishu-bot` 是否 `Up`、WS 是否报错、四项飞书凭证是否正确  
@@ -358,6 +363,37 @@ chmod +x scripts/test_deploy.sh
 | **CLI** | `uv run opspilot ask "问题"` / `--plan`，直连 LLM，**不经过** feishu-bot（与飞书联调路径独立） |
 | **LLM Gateway** | 宿主机 `uv run opspilot-gateway`，配置 `OPSPILOT_GATEWAY_*` |
 
+### 4.10 用 Trace ID 串接日志（排障神器）
+
+每次进入 agent-core 的请求都会有一个 `trace_id`，贯穿 HTTP 响应头、`feishu-bot` 内部调用链、操作审计三处，排障非常顺手。
+
+行为：
+
+- 客户端**不传** → agent-core 中间件自动生成一个，并在响应头 `X-OpsPilot-Trace-ID` 回显
+- 客户端**传** `X-OpsPilot-Trace-ID: <自定义值>` → 服务端复用该值（便于一次调试只 grep 一个 id）
+- `feishu-bot` 每条飞书消息生成一个 trace_id，并复用给 `/ask` + `/internal/channels/pending` + `/channels/feishu/card-action`，所以一次飞书对话从 WS 入消息到执行落审计全部串在一起
+- `logs/opspilot_audit.jsonl` 每条记录都带 `trace_id` 字段
+
+排障示例：
+
+```bash
+# 1) 自定义 trace_id 调用 /ask（-i 看响应头）
+curl -s -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${OPSPILOT_API_AUTH_TOKEN}" \
+  -H "X-OpsPilot-Trace-ID: debug-001" \
+  -d '{"question": "default 有哪些 pod 不正常"}' -i | head -20
+
+# 2) 从审计日志拉出本次涉及的所有工具操作
+grep '"trace_id": "debug-001"' logs/opspilot_audit.jsonl
+
+# 3) 飞书路径排障：从容器日志找到本次消息的 trace_id 再串到审计
+dc logs feishu-bot 2>&1 | grep 'trace_id='
+dc exec agent-core grep '"trace_id": "<刚才那个 id>"' /app/logs/opspilot_audit.jsonl
+```
+
+只要拿到一个 trace_id，就能定位「从入口到工具执行/拦截」整条链路的所有日志行——HITL、危险操作 `approved`/`executed` 审计、redact 后的 observation 都在。
+
 ---
 
 ## 5. 常见问题
@@ -414,7 +450,15 @@ dc logs agent-core
 
 ### Q8: 点击确认卡片后 Agent 没有继续执行
 
-当前设计：**确认只写入 STORE，不会自动发起下一轮 Agent**。请在飞书中**再发一条消息**（例如「继续执行 scale」）触发新的 `/ask`。后续版本可能增加 resume API。
+当前设计：**确认只写入 STORE，不会自动发起下一轮 Agent**。要让操作真正执行，需要由**同一个用户、在同一个聊天里**再发一条消息让 Agent 重新走一遍。
+
+执行的实际匹配规则（`guarded_call_tool` → `confirmed_actor_if_matches`）：
+- **tool 名 + tool_input 原文 + channel context（channel/chat_id/requester）四项全等**才会消费已有 confirmation 并执行
+- 任一项不同（例如 LLM 重新规划后输出的 JSON 字段顺序变了、或换了人触发、或换了群）→ 当作新请求，重新拦截 + 发新卡片
+
+实践建议：再发的消息**语义尽量贴近原始指令**（例如原来是「重启 order-service」，重发就用同样的句子），让 LLM 输出同样的 tool/input。如果反复重发都被识别成新请求，可看 `agent-core` 日志里两次 `guarded_call_tool` 调用的 `tool_name` 与 `raw_input`，找出 LLM 在哪个字段上漂移了。
+
+后续版本可能增加 resume API 直接把确认消费 + 执行一步做完，省掉重发那步。
 
 ### Q9: 停止 / 重置
 
