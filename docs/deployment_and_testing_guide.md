@@ -305,11 +305,15 @@ curl -s -X POST http://localhost:8000/ask \
 
 ### 4.3 `/alert` — 告警诊断
 
+`/alert` 使用 HMAC-SHA256 验签（`X-OpsPilot-Signature` 头），密钥来自 `OPSPILOT_ALERTMANAGER_HMAC_SECRET`。
+
 ```bash
+BODY=$(cat fixtures/alertmanager_webhook.json)
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "${OPSPILOT_ALERTMANAGER_HMAC_SECRET}" | awk '{print $2}')
 curl -s -X POST http://localhost:8000/alert \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${OPSPILOT_API_AUTH_TOKEN}" \
-  -d @fixtures/alertmanager_webhook.json | python3 -m json.tool
+  -H "X-OpsPilot-Signature: ${SIG}" \
+  -d "${BODY}" | python3 -m json.tool
 ```
 
 **预期**：`status` 为 `ok`，`diagnosis` 含诊断文本。

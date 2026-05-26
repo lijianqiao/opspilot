@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -28,7 +29,11 @@ from opspilot.entrypoints.agent_api_models import (
     PendingConfirmationInternalView,
     PendingConfirmationView,
 )
-from opspilot.entrypoints.auth import require_bearer, require_channel_internal_bearer
+from opspilot.entrypoints.auth import (
+    require_alertmanager_hmac,
+    require_bearer,
+    require_channel_internal_bearer,
+)
 from opspilot.entrypoints.body_limits import (
     MAX_AGENT_BODY_BYTES,
     MAX_ALERT_BODY_BYTES,
@@ -106,8 +111,8 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             Prometheus 指标。
         POST /ask — natural-language question (Bearer auth).
             自然语言提问（需 Bearer 鉴权）。
-        POST /alert — Alertmanager webhook payload (Bearer auth).
-            Alertmanager 告警载荷（需 Bearer 鉴权）。
+        POST /alert — Alertmanager webhook payload (HMAC auth).
+            Alertmanager 告警载荷（需 HMAC 签名鉴权）。
         GET /channels/pending/{request_id} — HITL pending lookup.
             待确认危险操作查询。
         POST /channels/feishu/card-action — Feishu confirm/cancel card.
@@ -218,10 +223,18 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
         record_agent_request(endpoint="/ask", status="success")
         return AskResponse(answer=answer)
 
-    @app.post("/alert", dependencies=[Depends(require_bearer)])
+    @app.post("/alert", dependencies=[Depends(require_alertmanager_hmac)])
     async def alert(request: Request) -> dict[str, str]:
         """POST /alert and return the diagnosis.
         调用 POST /alert 并返回诊断结果。
+
+        Auth: HMAC-SHA256 signature in X-OpsPilot-Signature header,
+        verified by the require_alertmanager_hmac dependency (which also
+        enforces the body size cap and stashes the raw bytes on
+        request.state.raw_alert_body for reuse here).
+        鉴权：X-OpsPilot-Signature 头中的 HMAC-SHA256 签名，由
+        require_alertmanager_hmac 依赖校验（同时强制请求体大小限制并将原始
+        字节存到 request.state.raw_alert_body 以便此处复用）。
 
         Args:
             request: Incoming HTTP request.
@@ -231,7 +244,13 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             Dict with status and diagnosis fields.
                 含 status 与 diagnosis 字段的字典。
         """
-        payload = require_json_object(await read_limited_json(request, MAX_ALERT_BODY_BYTES))
+        # The HMAC dependency already streamed and size-checked the body; reuse it.
+        # HMAC 依赖已经流式读取并完成大小校验，这里直接复用原始字节。
+        raw = request.state.raw_alert_body
+        try:
+            payload = require_json_object(json.loads(raw))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="invalid json") from exc
         source = request.headers.get("x-opspilot-alert-source") or payload.get("source") or "alertmanager"
         source_str = str(source)
         if source_str.strip().lower() == "alertmanager":

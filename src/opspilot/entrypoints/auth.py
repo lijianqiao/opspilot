@@ -13,7 +13,7 @@ import hashlib
 import hmac
 import secrets
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from opspilot.config import get_settings
 
@@ -89,3 +89,38 @@ def verify_alertmanager_signature(raw_body: bytes, signature: str) -> None:
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="invalid signature")
+
+
+async def require_alertmanager_hmac(
+    request: Request,
+    x_opspilot_signature: str = Header(default=""),
+) -> None:
+    """FastAPI dependency: verify Alertmanager HMAC signature on the raw body.
+
+    FastAPI 依赖：校验告警 Webhook 原始 body 的 HMAC 签名。
+
+    Streams the body with size guard via read_limited_body (rejects oversized
+    requests early instead of loading them fully) and stashes the bytes on
+    request.state.raw_alert_body so the handler can reuse them without
+    consuming the stream a second time.
+    通过 read_limited_body 流式读取并限制大小（超限早拒，不会先读满内存再判），
+    再将字节存到 request.state.raw_alert_body，供 handler 复用。
+
+    Args:
+        request: Incoming HTTP request.
+            入站 HTTP 请求。
+        x_opspilot_signature: Hex HMAC digest header value.
+            X-OpsPilot-Signature 头中的十六进制摘要。
+
+    Raises:
+        HTTPException: 413 if body too large, 503 if secret unconfigured,
+            401 if signature invalid.
+            请求体过大时 413，未配置密钥时 503，签名无效时 401。
+    """
+    # Lazy import avoids the auth -> body_limits -> auth cycle at module load.
+    # 延迟导入以避免 auth -> body_limits -> auth 的循环依赖。
+    from opspilot.entrypoints.body_limits import MAX_ALERT_BODY_BYTES, read_limited_body
+
+    raw = await read_limited_body(request, MAX_ALERT_BODY_BYTES)
+    request.state.raw_alert_body = raw
+    verify_alertmanager_signature(raw, x_opspilot_signature)
