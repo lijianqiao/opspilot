@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import threading
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -42,7 +41,26 @@ AgentFn = Callable[[str], Awaitable[str]]
 _FEISHU_MENTION_RE = re.compile(r"^@\S+\s*")
 _REQUEST_ID_RE = re.compile(r"request_id=([A-Za-z0-9_\-]+)")
 
-_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="opspilot-feishu")
+_executor: ThreadPoolExecutor | None = None
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """Return (and lazily create) the module-level worker pool.
+
+    返回（必要时惰性创建）模块级工作线程池。
+
+    Worker count is read once from ``settings.feishu_workers`` on first call.
+    工作线程数在首次调用时一次性从 ``settings.feishu_workers`` 读取。
+
+    Returns:
+        Shared ThreadPoolExecutor for Feishu WS handlers.
+            供飞书 WS 处理器共用的线程池。
+    """
+    global _executor
+    if _executor is None:
+        workers = get_settings().feishu_workers
+        _executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="opspilot-feishu")
+    return _executor
 
 
 def _select_agent(text: str) -> tuple[str, bool]:
@@ -88,58 +106,6 @@ async def handle_question(text: str, agent: AgentFn) -> str:
     except Exception:
         logger.exception("agent failed for feishu message")
         return redact("处理出错，请稍后重试或联系运维。")
-
-
-def _run_blocking(coro_factory: Callable[[], Awaitable[object]]) -> object:
-    """Run an async coroutine factory in a fresh thread event loop.
-
-    在无运行中事件循环的新线程中执行异步协程工厂。
-
-    Args:
-        coro_factory: Zero-arg callable returning an awaitable.
-            无参可调用对象，返回 awaitable。
-
-    Returns:
-        Coroutine result.
-            协程执行结果。
-
-    Raises:
-        Exception: Re-raises any exception from the worker thread.
-            工作线程中的异常会原样抛出。
-    """
-    box: dict[str, object] = {}
-    error: dict[str, Exception] = {}
-
-    def _worker() -> None:
-        try:
-            box["result"] = anyio.run(coro_factory)
-        except Exception as exc:
-            error["exc"] = exc
-
-    thread = threading.Thread(target=_worker, name="opspilot-feishu-async")
-    thread.start()
-    thread.join()
-    if "exc" in error:
-        raise error["exc"]
-    return box["result"]
-
-
-def _run_blocking_question(text: str, agent: AgentFn) -> str:
-    """Run handle_question in a fresh event loop on a new thread.
-
-    在新线程的独立事件循环中运行 handle_question。
-
-    Args:
-        text: Incoming message text.
-            入站消息文本。
-        agent: Async agent callable.
-            异步 agent 可调用对象。
-
-    Returns:
-        Answer string from handle_question.
-            handle_question 返回的回答字符串。
-    """
-    return str(_run_blocking(lambda: handle_question(text, agent)))
 
 
 async def _handle_via_agent_core(
@@ -325,10 +291,11 @@ def run() -> None:  # manual verification only, not unit tested
     agent_client = AgentClient(settings)
 
     def _handle_in_background(chat_id: str, question: str, requester: str | None) -> None:
+        # Fire-and-forget: run the async handler in this worker thread via
+        # anyio.run; errors are logged so they never escape to the executor.
+        # 即发即忘：worker 线程内用 anyio.run 跑异步处理；异常落日志，不向上抛。
         try:
-            _run_blocking(
-                lambda: _handle_via_agent_core(lark_client, chat_id, question, agent_client, requester=requester)
-            )
+            anyio.run(lambda: _handle_via_agent_core(lark_client, chat_id, question, agent_client, requester=requester))
         except Exception:
             logger.exception("Failed to handle message for chat %s", chat_id)
 
@@ -347,8 +314,17 @@ def run() -> None:  # manual verification only, not unit tested
         }
         if event_chat_id:
             payload["chat_id"] = str(event_chat_id)
+        # Card callback must return synchronously: submit to executor and
+        # block via .result(timeout=...) so a slow agent-core doesn't hang
+        # the lark WS handler forever.
+        # 卡片回调必须同步返回结果：提交线程池后用 .result(timeout=...) 阻塞，
+        # 防止 agent-core 慢响应卡死 lark WS handler。
+        future = _get_executor().submit(lambda: anyio.run(lambda: agent_client.feishu_card_action(payload)))
         try:
-            msg = str(_run_blocking(lambda: agent_client.feishu_card_action(payload)))
+            msg = str(future.result(timeout=30))
+        except TimeoutError:
+            logger.warning("feishu card-action timed out after 30s")
+            return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "处理超时，请稍后重试"}})
         except Exception:
             logger.exception("feishu card-action via agent-core failed")
             return P2CardActionTriggerResponse({"toast": {"type": "error", "content": "处理失败，请稍后重试"}})
@@ -363,7 +339,7 @@ def run() -> None:  # manual verification only, not unit tested
             return
         sender = data.sender
         requester = (sender.sender_id.open_id if sender and sender.sender_id else None) or None
-        _EXECUTOR.submit(_handle_in_background, data.message.chat_id, question, requester)
+        _get_executor().submit(_handle_in_background, data.message.chat_id, question, requester)
 
     handler = (
         lark.EventDispatcherHandler.builder(

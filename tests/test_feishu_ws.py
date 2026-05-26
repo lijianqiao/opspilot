@@ -11,7 +11,6 @@ import anyio
 import pytest
 
 from opspilot.entrypoints.feishu_ws import (
-    _run_blocking_question,
     _select_agent,
     handle_question,
 )
@@ -98,38 +97,29 @@ async def test_bare_anyio_run_fails_inside_running_loop() -> None:
         anyio.run(handle_question, "x", agent)
 
 
-@pytest.mark.anyio
-async def test_run_blocking_works_inside_running_loop() -> None:
-    # Same running-loop environment; _run_blocking must succeed.
+def test_executor_uses_configured_worker_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 校验 _get_executor 用 settings.feishu_workers 创建线程池；
+    # 移除旧 _run_blocking 后这是验证新线程模型可配置性的最小契约。
     """
-    Verify run blocking works inside running loop.
+    Verify executor uses configured worker count.
 
-    验证：run blocking works inside running loop。
+    验证：executor uses configured worker count。
     """
+    import opspilot.entrypoints.feishu_ws as ws
+    from opspilot.config import get_settings
 
-    async def agent(text: str) -> str:
-        return f"answered: {text}"
-
-    assert _run_blocking_question("  pod 状态  ", agent) == "answered: pod 状态"
-
-
-@pytest.mark.anyio
-async def test_run_blocking_returns_redacted_message_on_agent_error() -> None:
-    """
-    Verify run blocking returns redacted message on agent error.
-
-    验证：run blocking returns redacted message on agent error。
-    """
-
-    async def boom(text: str) -> str:
-        raise ValueError("agent failed with secret=sk-XYZ")
-
-    # handle_question catches the error and returns a redacted generic message
-    # (审查报告：之前是 f"Error: {exc}"，会泄露 secret-shaped 错误内容)
-    result = _run_blocking_question("hi", boom)
-    assert "agent failed" not in result
-    assert "sk-XYZ" not in result
-    assert "出错" in result
+    monkeypatch.setenv("OPSPILOT_FEISHU_WORKERS", "3")
+    get_settings.cache_clear()
+    monkeypatch.setattr(ws, "_executor", None)
+    executor = ws._get_executor()
+    try:
+        assert executor._max_workers == 3
+        # Second call returns the same cached instance.
+        assert ws._get_executor() is executor
+    finally:
+        executor.shutdown(wait=False)
+        monkeypatch.setattr(ws, "_executor", None)
+        get_settings.cache_clear()
 
 
 def test_select_agent_plan_prefix():

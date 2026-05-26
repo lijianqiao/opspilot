@@ -53,6 +53,8 @@ class Settings(BaseSettings):
             为 True 时工具从 fixtures/ 读模拟数据（Docker 联调推荐）。
         fixtures_dir: Override fixtures directory (empty = auto-detect).
             覆盖 fixtures 目录路径（空则自动探测项目根 fixtures/）。
+        feishu_workers: Worker thread count for Feishu WS message handling.
+            飞书 WS 消息处理的工作线程数。
     """
 
     model_config = SettingsConfigDict(env_prefix="OPSPILOT_", env_file=".env", extra="ignore")
@@ -75,6 +77,7 @@ class Settings(BaseSettings):
     agent_core_url: str = "http://localhost:8000"
     use_mock_tools: bool = True
     fixtures_dir: str = ""
+    feishu_workers: int = 8
 
 
 @lru_cache(maxsize=1)
