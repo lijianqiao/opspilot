@@ -12,6 +12,28 @@ import pytest
 from opspilot.agent.react import run_react
 from opspilot.tools.registry import ToolInfo, _registry
 
+# react.py is deprecated learning code; its import warning would spam the
+# rest of the test output. The dedicated deprecation test below uses
+# warnings.catch_warnings + simplefilter("always") to override this scope.
+# react.py 已弃用，导入会产生 DeprecationWarning；此处统一过滤，专用断言用例自带覆盖。
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
+
+def test_react_module_emits_deprecation_warning() -> None:
+    """Importing opspilot.agent.react emits a DeprecationWarning.
+    导入 opspilot.agent.react 会触发 DeprecationWarning。"""
+    import importlib
+    import sys
+    import warnings
+
+    sys.modules.pop("opspilot.agent.react", None)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.import_module("opspilot.agent.react")
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught), (
+        "expected DeprecationWarning from opspilot.agent.react import"
+    )
+
 
 class FakeLLM:
     def __init__(self, replies: list[str]) -> None:

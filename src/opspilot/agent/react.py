@@ -10,10 +10,19 @@
 from __future__ import annotations
 
 import logging
+import warnings
 
-from opspilot.agent.protocols import SupportsChat
-from opspilot.agent.react_protocol import parse_react_output
-from opspilot.tools.registry import ToolError, build_tools_prompt, call_tool
+warnings.warn(
+    "opspilot.agent.react is a Stage-0 reference implementation without "
+    "guardrails/audit/redact. Production code must import from "
+    "opspilot.agent.langgraph_agent instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from opspilot.agent.protocols import SupportsChat  # noqa: E402
+from opspilot.agent.react_protocol import parse_react_output  # noqa: E402
+from opspilot.tools.registry import ToolError, build_tools_prompt, call_tool  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
