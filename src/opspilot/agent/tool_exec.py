@@ -9,8 +9,12 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from dataclasses import dataclass
+from typing import Any
+
+import anyio.to_thread
 
 import opspilot.tools  # noqa: F401 - register built-in tools before execution
 from opspilot.agent.confirmation import STORE, ConfirmationStore
@@ -238,3 +242,17 @@ def guarded_call_tool(
         path=audit_path,
     )
     return GuardedResult(observation=observation, blocked=False)
+
+
+async def guarded_call_tool_async(*args: Any, **kwargs: Any) -> GuardedResult:
+    """Async wrapper: run guarded_call_tool in a worker thread to free the event loop.
+    异步包装：在工作线程中执行 guarded_call_tool 以释放事件循环。
+
+    The synchronous chokepoint stays as-is — only the worker-thread hop is added
+    so blocking tool calls (kubectl/Loki/Prom) no longer freeze the loop. The
+    current contextvars.Context (e.g. trace id, current LLM) propagates into the
+    worker thread automatically.
+    同步入口保持原状，仅新增工作线程跳板，避免 kubectl/Loki/Prom 等阻塞调用卡住事件循环。
+    当前 contextvars.Context（如 trace id、当前 LLM）会自动传递到工作线程。
+    """
+    return await anyio.to_thread.run_sync(functools.partial(guarded_call_tool, *args, **kwargs))

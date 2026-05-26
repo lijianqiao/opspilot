@@ -21,7 +21,7 @@ from opspilot.agent.react_protocol import (
     STEP_RE as _STEP_RE,
 )
 from opspilot.agent.react_protocol import parse_react_output
-from opspilot.agent.tool_exec import guarded_call_tool
+from opspilot.agent.tool_exec import guarded_call_tool_async
 from opspilot.config import get_settings
 from opspilot.tools.registry import build_tools_prompt
 
@@ -159,7 +159,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
     calls = state["tool_calls"]
     if parsed.action is not None:
         calls += 1
-        guarded = guarded_call_tool(
+        guarded = await guarded_call_tool_async(
             parsed.action,
             parsed.action_input,
             calls=calls,

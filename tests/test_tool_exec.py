@@ -7,8 +7,10 @@
     测试统一 guarded_call_tool 受控执行。
 """
 
+import pytest
+
 from opspilot.agent.confirmation import ConfirmationStore
-from opspilot.agent.tool_exec import GuardedResult, guarded_call_tool
+from opspilot.agent.tool_exec import GuardedResult, guarded_call_tool, guarded_call_tool_async
 
 
 def test_safe_tool_executes_and_audits(tmp_path) -> None:
@@ -328,3 +330,22 @@ def test_confirmed_high_risk_tool_does_not_execute_when_audit_fails(monkeypatch,
     assert "audit" in result.observation.lower()
     # Confirmation must survive so the operator can retry without re-issuing a card.
     assert store.is_confirmed(pc.request_id) is True
+
+
+@pytest.mark.anyio
+async def test_guarded_call_tool_async_returns_same_result_off_loop(tmp_path) -> None:
+    """
+    Async wrapper runs sync execution in a worker thread, returns same result.
+
+    验证：异步包装在工作线程中运行同步路径，并返回等价结果。
+    """
+    r = await guarded_call_tool_async(
+        "kubectl_get",
+        "pods",
+        calls=1,
+        max_calls=8,
+        store=ConfirmationStore(300),
+        audit_path=str(tmp_path / "a.jsonl"),
+    )
+    assert isinstance(r, GuardedResult)
+    assert r.blocked is False
