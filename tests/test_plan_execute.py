@@ -126,6 +126,38 @@ async def test_plan_execute_hard_rejects_tool_outside_filter() -> None:
 
 
 @pytest.mark.anyio
+async def test_replan_resets_results() -> None:
+    """
+    Verify replan resets results so prior attempts don't leak into the next summary.
+
+    验证：replan 时清空 results，避免上一轮结果累积到下一轮 summary。
+    """
+    seen_summaries: list[str] = []
+
+    class _StubLLM:
+        def __init__(self) -> None:
+            self.turn = 0
+
+        async def chat(self, messages: list[dict[str, str]]) -> str:
+            self.turn += 1
+            text = messages[-1]["content"]
+            if "拆成有序的执行步骤" in text:
+                return "1. step_a"
+            if "DONE" in text and "REPLAN" in text:
+                seen_summaries.append(text)
+                if len(seen_summaries) < 2:
+                    return "REPLAN"
+                return "DONE all done"
+            return "Final Answer: ok"
+
+    await run_plan_execute("q", _StubLLM(), max_steps=10)
+    assert len(seen_summaries) >= 2
+    # After replan, prior step's result should be gone from the new summary.
+    second = seen_summaries[1]
+    assert second.count("step_a") <= 1, "results should reset on replan"
+
+
+@pytest.mark.anyio
 async def test_plan_execute_confirmed_request_executes_once() -> None:
     """
     Verify plan execute confirmed request executes once.

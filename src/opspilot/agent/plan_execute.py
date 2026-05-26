@@ -28,7 +28,21 @@ from opspilot.tools.registry import build_tools_prompt
 logger = logging.getLogger(__name__)
 
 
-def _append(left: list[dict[str, str]], right: list[dict[str, str]]) -> list[dict[str, str]]:
+def _append_or_reset(left: list[dict[str, str]], right: list[dict[str, str]]) -> list[dict[str, str]]:
+    """LangGraph reducer for plan results: append by default, reset on empty right.
+    Plan results 的 LangGraph reducer：默认追加；右侧为空时重置为 []。
+
+    CONTRACT: returning an empty list ``[]`` from a node MEANS "reset to []".
+    Returning ``[item, ...]`` appends to the existing list as usual. Any node
+    that wants to append MUST emit at least one entry — emitting ``[]`` will
+    wipe accumulated results. This is used by planner_node to clear the prior
+    attempt's results when the replan loop fires.
+    约定：节点返回 ``[]`` 表示"重置为 []"；返回非空列表则追加到现有列表。
+    任何想追加的节点必须至少返回一条；返回 ``[]`` 会清空累积结果。
+    planner_node 借此在 replan 触发再次规划时清空上一轮结果。
+    """
+    if not right:
+        return []
     return left + right
 
 
@@ -60,7 +74,7 @@ class PlanState(TypedDict):
     confirmation_context: dict[str, str] | None
     plan: list[str]
     cursor: int
-    results: Annotated[list[dict[str, str]], _append]
+    results: Annotated[list[dict[str, str]], _append_or_reset]
     final: str
     steps_taken: int
     max_steps: int
@@ -106,7 +120,10 @@ async def planner_node(state: PlanState) -> dict[str, Any]:
     if not plan:
         plan = [state["question"]]
     logger.info("Parsed plan (%d steps): %s", len(plan), plan)
-    return {"plan": plan, "cursor": 0}
+    # results=[] triggers the _append_or_reset reducer to clear prior-attempt
+    # results, so replan summaries don't accumulate across re-plans.
+    # results=[] 会触发 _append_or_reset 重置，避免上一轮结果累积到下一轮 summary。
+    return {"plan": plan, "cursor": 0, "results": []}
 
 
 async def executor_node(state: PlanState) -> dict[str, Any]:
@@ -156,6 +173,9 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
         result = parsed.final
     else:
         result = reply.strip()
+    # Must emit at least one result entry per step; an empty list would trigger
+    # the _append_or_reset reducer and wipe accumulated results.
+    # 每步至少返回一条结果；返回空列表会触发 _append_or_reset 清空累积结果。
     return {
         "results": [{"step": step, "result": result}],
         "cursor": state["cursor"] + 1,
