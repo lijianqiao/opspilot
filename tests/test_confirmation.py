@@ -10,6 +10,8 @@
 import dataclasses
 import time
 
+import pytest
+
 from opspilot.agent.confirmation import ConfirmationStore
 
 
@@ -197,6 +199,30 @@ def test_legacy_pending_with_empty_context_matches_any_context() -> None:
         )
         is True
     )
+
+
+def test_confirm_success_writes_confirmed_audit(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ConfirmationStore.confirm() appends a status='confirmed' audit entry.
+
+    验证：confirm 成功时同步落审计（status='confirmed'）。
+    """
+    from opspilot.config import get_settings
+
+    audit = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("OPSPILOT_AUDIT_LOG_PATH", str(audit))
+    get_settings.cache_clear()
+    try:
+        store = ConfirmationStore(300)
+        pc = store.request("kubectl_scale", '{"deployment":"x","replicas":0}')
+        ok = store.confirm(pc.request_id, pc.token, actor="feishu:test")
+        assert ok is True
+
+        content = audit.read_text(encoding="utf-8")
+        assert '"status": "confirmed"' in content
+        assert '"confirmed_by": "feishu:test"' in content
+        assert pc.request_id in content or "kubectl_scale" in content
+    finally:
+        get_settings.cache_clear()
 
 
 def test_get_pending_returns_record_without_consuming() -> None:

@@ -172,7 +172,35 @@ class ConfirmationStore:
             if not _context_matches(pc.context, context):
                 return False
             self._confirmed_by[request_id] = actor
-            return True
+
+        # Audit the confirm click immediately so we never lose "who/when approved"
+        # even if the operation is never re-executed by the agent.
+        # 立即审计 confirm 行为，避免操作未再次执行时丢失“谁/何时审批”。
+        # Lazy import is intentional: confirmation.py is imported very early; a
+        # top-level import here would create confirmation → audit → guardrails
+        # → registry → ... cycle at module load.
+        # 延迟导入是有意的：顶层导入会触发 confirmation → audit → guardrails
+        # → registry → ... 的循环依赖。
+        try:
+            from opspilot.observability.audit import record_operation
+
+            record_operation(
+                tool=pc.tool,
+                tool_input=pc.tool_input,
+                actor=actor,
+                confirmed_by=actor,
+                status="confirmed",
+                result="human confirmation received",
+                rollback=None,
+            )
+        except Exception:  # noqa: BLE001 — audit failure must not break confirm UX
+            # The operator already clicked; we cannot un-click. Execution still
+            # has its own fail-closed audit in guarded_call_tool, so this is
+            # not a security hole.
+            # 操作者已点击，无法撤销；guarded_call_tool 中执行路径仍有 fail-closed
+            # 审计兜底，此处吞异常不会造成安全漏洞。
+            pass
+        return True
 
     def is_confirmed(self, request_id: str) -> bool:
         """Return whether request_id has been confirmed but not yet consumed.
