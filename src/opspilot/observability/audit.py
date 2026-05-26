@@ -45,17 +45,17 @@ def _default_path() -> str:
     return get_settings().audit_log_path
 
 
-def _safe_field(value: str) -> str:
-    """Safely truncate the value to the maximum field length.
-    安全地截断值到最大字段长度。
+def _redact_and_truncate(value: str) -> str:
+    """Redact secrets/PII then truncate to _MAX_FIELD_CHARS.
+    先脱敏（密钥/敏感信息）再截断到 _MAX_FIELD_CHARS。
 
     Args:
-        value: String value to truncate.
-            要截断的字符串值。
+        value: String value to redact and truncate.
+            要脱敏并截断的字符串值。
 
     Returns:
-        Truncated string value.
-            截断后的字符串值。
+        Redacted and truncated string value.
+            脱敏并截断后的字符串值。
     """
     from opspilot.agent.guardrails import redact
 
@@ -115,11 +115,11 @@ def record_operation(
         "ts": datetime.now(UTC).isoformat(),
         "trace_id": get_trace_id(),
         "tool": tool,
-        "tool_input": _safe_field(tool_input),
+        "tool_input": _redact_and_truncate(tool_input),
         "actor": actor,
         "confirmed_by": confirmed_by,
         "status": status,
-        "result": _safe_field(result),
+        "result": _redact_and_truncate(result),
         "rollback": rollback,
     }
     target = path or _default_path()
