@@ -10,12 +10,12 @@
 from __future__ import annotations
 
 import logging
-from contextvars import ContextVar
 from typing import Annotated, Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+from opspilot.agent.context import require_llm, use_llm
 from opspilot.agent.protocols import SupportsChat
 from opspilot.agent.react_protocol import (
     ACTION_RE as _ACTION_RE,
@@ -68,11 +68,13 @@ class AgentState(TypedDict):
 
 # --- Nodes ---
 
-# ContextVar for LLM reference — set by run_react_graph() before ainvoke().
-# LangGraph StateGraph only processes keys declared in the schema, so we
-# can't pass the LLM through state. ContextVar is async-safe: each
-# concurrent task gets its own copy automatically.
-_current_llm: ContextVar[SupportsChat] = ContextVar("_current_llm")
+# LLM reference comes from the shared ContextVar in opspilot.agent.context,
+# set by run_react_graph() via `with use_llm(llm): ...`. LangGraph
+# StateGraph only marshals keys declared in the schema, so the LLM can't
+# travel through state.
+# LLM 引用通过 opspilot.agent.context 的共享 ContextVar 传递，
+# 由 run_react_graph() 通过 `with use_llm(llm): ...` 绑定。
+# LangGraph StateGraph 仅处理 schema 中声明的键，无法将 LLM 通过 state 传递。
 
 
 async def agent_node(state: AgentState) -> dict[str, Any]:
@@ -87,9 +89,7 @@ async def agent_node(state: AgentState) -> dict[str, Any]:
         State update with one assistant message and incremented steps_taken.
             含一条助手消息且 steps_taken 加一的状态更新。
     """
-    llm = _current_llm.get(None)
-    if llm is None:
-        raise RuntimeError("LLM not set. Call run_react_graph() which sets _current_llm.")
+    llm = require_llm()
 
     messages = state["messages"]
     reply = await llm.chat(messages)
@@ -240,8 +240,6 @@ async def run_react_graph(
     """
     system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=tool_filter)}"
 
-    _current_llm.set(llm)
-
     initial_state: dict[str, Any] = {
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -256,7 +254,8 @@ async def run_react_graph(
         "allowed_tools": sorted(tool_filter) if tool_filter else None,
     }
 
-    result = await _compiled_graph.ainvoke(initial_state)
+    with use_llm(llm):
+        result = await _compiled_graph.ainvoke(initial_state)
 
     if result.get("tool_calls", 0) >= get_settings().agent_max_tool_calls:
         for msg in reversed(result["messages"]):
@@ -301,7 +300,6 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
 
     async def _run(question: str, llm: SupportsChat, thread_id: str, max_steps: int = 5) -> str:
         system_prompt = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"
-        _current_llm.set(llm)
         config = {"configurable": {"thread_id": thread_id}}
         initial_state: dict[str, Any] = {
             "messages": [
@@ -316,7 +314,8 @@ def build_checkpointed_runner(checkpointer: Any) -> Any:
             "tool_calls": 0,
             "allowed_tools": None,
         }
-        result = await compiled.ainvoke(initial_state, config=config)
+        with use_llm(llm):
+            result = await compiled.ainvoke(initial_state, config=config)
         for msg in reversed(result["messages"]):
             if msg["role"] == "assistant":
                 if final := _FINAL_RE.search(msg["content"]):

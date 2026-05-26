@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+from opspilot.agent.context import require_llm, use_llm
 from opspilot.agent.protocols import SupportsChat
 from opspilot.agent.react_protocol import (
     STEP_RE as _STEP_RE,
@@ -81,15 +82,7 @@ class PlanState(TypedDict):
     tool_calls: int
 
 
-_current_llm: ContextVar[SupportsChat] = ContextVar("_pe_current_llm")
 _pe_tool_filter: ContextVar[set[str] | None] = ContextVar("_pe_tool_filter", default=None)
-
-
-def _llm() -> SupportsChat:
-    llm = _current_llm.get(None)
-    if llm is None:
-        raise RuntimeError("LLM not set. Call run_plan_execute().")
-    return llm
 
 
 async def planner_node(state: PlanState) -> dict[str, Any]:
@@ -114,7 +107,7 @@ async def planner_node(state: PlanState) -> dict[str, Any]:
         f"格式：每行一个步骤，形如 `1. 查看 default 命名空间的 pod 状态`\n\n"
         f"任务：{state['question']}"
     )
-    reply = await _llm().chat([{"role": "user", "content": prompt}])
+    reply = await require_llm().chat([{"role": "user", "content": prompt}])
     logger.info("Planner reply: %s", reply[:300])
     plan = [m.group(1).strip() for m in _STEP_RE.finditer(reply)]
     if not plan:
@@ -140,7 +133,7 @@ async def executor_node(state: PlanState) -> dict[str, Any]:
     """
     step = state["plan"][state["cursor"]]
     sys = f"你是运维助手 OpsPilot。\n\n{build_tools_prompt(tool_filter=_pe_tool_filter.get())}"
-    reply = await _llm().chat(
+    reply = await require_llm().chat(
         [
             {"role": "system", "content": sys},
             {
@@ -197,7 +190,7 @@ async def replan_node(state: PlanState) -> dict[str, Any]:
             含 final 答案或空 final 以触发再规划的状态更新。
     """
     summary = "\n".join(f"- {r['step']}: {r['result']}" for r in state["results"])
-    reply = await _llm().chat(
+    reply = await require_llm().chat(
         [
             {
                 "role": "user",
@@ -284,7 +277,6 @@ async def run_plan_execute(
         Final synthesized answer or last step result / limit message.
             综合最终答案、最后一步结果或步数上限提示。
     """
-    _current_llm.set(llm)
     token = _pe_tool_filter.set(tool_filter)
     init: dict[str, Any] = {
         "question": question,
@@ -299,7 +291,8 @@ async def run_plan_execute(
         "tool_calls": 0,
     }
     try:
-        result = await _compiled.ainvoke(init, config={"recursion_limit": 100})
+        with use_llm(llm):
+            result = await _compiled.ainvoke(init, config={"recursion_limit": 100})
     finally:
         _pe_tool_filter.reset(token)
     if result["final"]:

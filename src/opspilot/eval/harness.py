@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from opspilot.agent.langgraph_agent import _FINAL_RE, _compiled_graph, _current_llm, run_react_graph
+from opspilot.agent.context import use_llm
+from opspilot.agent.langgraph_agent import _FINAL_RE, _compiled_graph, run_react_graph
 from opspilot.config import get_settings
 from opspilot.eval.cases import CASES, EvalCase
 from opspilot.tools.registry import build_tools_prompt
@@ -98,7 +99,6 @@ async def _run_with_trace(case: EvalCase, llm: _ScriptedLLM) -> tuple[str, str]:
         Tuple of final answer string and concatenated trace text.
             (最终答案字符串, 拼接后的轨迹文本) 元组。
     """
-    _current_llm.set(llm)
     initial_state: dict[str, object] = {
         "messages": [
             {"role": "system", "content": f"你是运维助手 OpsPilot。\n\n{build_tools_prompt()}"},
@@ -109,7 +109,8 @@ async def _run_with_trace(case: EvalCase, llm: _ScriptedLLM) -> tuple[str, str]:
         "max_steps": case.max_steps,
         "tool_calls": 0,
     }
-    result = await _compiled_graph.ainvoke(initial_state)
+    with use_llm(llm):
+        result = await _compiled_graph.ainvoke(initial_state)
     messages = result.get("messages", [])
     trace = "\n".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
 

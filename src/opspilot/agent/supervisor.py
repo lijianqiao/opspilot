@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import logging
 import re
-from contextvars import ContextVar
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+from opspilot.agent.context import require_llm, use_llm
 from opspilot.agent.langgraph_agent import run_react_graph
 from opspilot.agent.protocols import SupportsChat
 
@@ -59,16 +59,6 @@ class SupervisorState(TypedDict):
     final_answer: str
 
 
-_current_llm: ContextVar[SupportsChat] = ContextVar("_sup_current_llm")
-
-
-def _llm() -> SupportsChat:
-    llm = _current_llm.get(None)
-    if llm is None:
-        raise RuntimeError("LLM not set. Call run_supervisor().")
-    return llm
-
-
 async def classify_node(state: SupervisorState) -> dict[str, Any]:
     """Classify user intent into log_analyzer, ops_operator, or generic_react.
     将用户意图分类为 log_analyzer、ops_operator 或 generic_react。
@@ -90,7 +80,7 @@ async def classify_node(state: SupervisorState) -> dict[str, Any]:
         f"用户消息：{state['question']}\n\n"
         "只回复 INTENT: <类别>，不要输出其他内容。"
     )
-    reply = await _llm().chat([{"role": "user", "content": prompt}])
+    reply = await require_llm().chat([{"role": "user", "content": prompt}])
     logger.info("Classification reply: %s", reply[:100])
     match = _INTENT_RE.search(reply)
     intent = match.group(1).strip().lower() if match else "generic_react"
@@ -111,7 +101,7 @@ async def log_analyzer_node(state: SupervisorState) -> dict[str, Any]:
     """
     answer = await run_react_graph(
         state["question"],
-        _llm(),
+        require_llm(),
         tool_filter=_LOG_ANALYZER_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
         confirmation_context=state.get("confirmation_context"),
@@ -135,7 +125,7 @@ async def ops_operator_node(state: SupervisorState) -> dict[str, Any]:
 
     answer = await run_plan_execute(
         state["question"],
-        _llm(),
+        require_llm(),
         tool_filter=_OPS_OPERATOR_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
         confirmation_context=state.get("confirmation_context"),
@@ -157,7 +147,7 @@ async def generic_react_node(state: SupervisorState) -> dict[str, Any]:
     """
     answer = await run_react_graph(
         state["question"],
-        _llm(),
+        require_llm(),
         tool_filter=_GENERIC_TOOLS,
         confirmed_request_id=state.get("confirmed_request_id"),
         confirmation_context=state.get("confirmation_context"),
@@ -226,7 +216,6 @@ async def run_supervisor(
         Sub-agent final answer text.
             子智能体返回的最终答案文本。
     """
-    _current_llm.set(llm)
     init: dict[str, Any] = {
         "question": question,
         "confirmed_request_id": confirmed_request_id,
@@ -234,5 +223,6 @@ async def run_supervisor(
         "intent": "",
         "final_answer": "",
     }
-    result = await _compiled_supervisor.ainvoke(init, config={"recursion_limit": 50})
+    with use_llm(llm):
+        result = await _compiled_supervisor.ainvoke(init, config={"recursion_limit": 50})
     return result.get("final_answer", "") or "未能得到最终答案。"
