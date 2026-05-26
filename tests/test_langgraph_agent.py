@@ -164,3 +164,32 @@ async def test_graph_confirmed_request_executes_once() -> None:
     observation = llm_reuse.calls[1][-1]["content"]
     assert "request_id=" in observation
     assert "scaled:" not in observation
+
+
+@pytest.mark.anyio
+async def test_graph_stops_at_max_tool_calls_without_extra_llm_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """should_continue ends the graph at == max_calls (no wasted LLM turn).
+
+    验证：到达 max_tool_calls 时 should_continue 直接结束图，不再多跑一轮 LLM。
+    """
+    from opspilot.config import get_settings
+
+    monkeypatch.setenv("OPSPILOT_AGENT_MAX_TOOL_CALLS", "2")
+    get_settings.cache_clear()
+
+    llm_calls: list[int] = []
+
+    class _StubLLM:
+        async def chat(self, messages: list[dict[str, str]]) -> str:
+            llm_calls.append(len(messages))
+            return "Thought: x\nAction: get_pod_status\nAction Input: default"
+
+    try:
+        await run_react_graph("test", _StubLLM(), max_steps=10)
+        # 2 tool calls max → 2 LLM turns that produced Actions, no 3rd wasted turn.
+        # With the old `>` boundary, this would be 3 (one extra wasted turn).
+        assert len(llm_calls) == 2, f"expected exactly 2 LLM turns, got {len(llm_calls)}"
+    finally:
+        get_settings.cache_clear()

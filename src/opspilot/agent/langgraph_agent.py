@@ -151,7 +151,7 @@ def should_continue(state: AgentState) -> str:
         Edge label "tools" or "end".
             边标签 "tools" 或 "end"。
     """
-    if state["tool_calls"] > get_settings().agent_max_tool_calls:
+    if state["tool_calls"] >= get_settings().agent_max_tool_calls:
         return "end"
 
     if state["steps_taken"] >= state["max_steps"]:
@@ -169,6 +169,23 @@ def should_continue(state: AgentState) -> str:
     return "end"
 
 
+def after_tools(state: AgentState) -> str:
+    """Route back to agent, or end if we've hit the tool-call cap.
+    工具执行后路由：返回 agent；若已达 tool_calls 上限则直接结束，避免多跑一轮 LLM。
+
+    Args:
+        state: Current agent state.
+            当前智能体状态。
+
+    Returns:
+        Edge label "agent" or "end".
+            边标签 "agent" 或 "end"。
+    """
+    if state["tool_calls"] >= get_settings().agent_max_tool_calls:
+        return "end"
+    return "agent"
+
+
 # --- Graph construction ---
 
 
@@ -179,7 +196,7 @@ def _build_graph(checkpointer: Any | None = None) -> Any:
     graph.add_node("tools", tool_node)
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
-    graph.add_edge("tools", "agent")
+    graph.add_conditional_edges("tools", after_tools, {"agent": "agent", "end": END})
     if checkpointer is not None:
         return graph.compile(checkpointer=checkpointer)
     return graph.compile()
@@ -241,7 +258,7 @@ async def run_react_graph(
 
     result = await _compiled_graph.ainvoke(initial_state)
 
-    if result.get("tool_calls", 0) > get_settings().agent_max_tool_calls:
+    if result.get("tool_calls", 0) >= get_settings().agent_max_tool_calls:
         for msg in reversed(result["messages"]):
             if msg["role"] == "assistant" and (final := _FINAL_RE.search(msg["content"])):
                 return final.group(1).strip()
