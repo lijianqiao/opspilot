@@ -20,14 +20,16 @@ def test_dangerous_by_registry_risk() -> None:
     assert is_dangerous("kubectl_scale", '{"deployment": "x", "replicas": 0}') is True
 
 
-def test_dangerous_by_input_pattern_even_if_low_tool() -> None:
-    """
-    Verify dangerous by input pattern even if low tool.
+def test_low_risk_tool_with_destructive_text_no_longer_blocked() -> None:
+    """raw_input text scanning was removed; only registry risk='high' triggers HITL.
 
-    验证：dangerous by input pattern even if low tool。
+    验证：低风险工具携带破坏性文本不再触发 HITL（仅以注册表 risk='high' 为准）。
     """
-    assert is_dangerous("kubectl_get", "rm -rf /data") is True
-    assert is_dangerous("kubectl_get", "drop table users") is True
+    # A 'low' tool receiving destructive-looking text should NOT be flagged —
+    # the text is just data, not an executed command.
+    assert is_dangerous("kubectl_get", "rm -rf /data") is False
+    assert is_dangerous("kubectl_get", "drop table users") is False
+    assert is_dangerous("kubectl_get", '{"query": "drop table x"}') is False
 
 
 def test_safe_low_tool_safe_input() -> None:
@@ -39,14 +41,13 @@ def test_safe_low_tool_safe_input() -> None:
     assert is_dangerous("kubectl_get", "pods") is False
 
 
-def test_unknown_tool_falls_back_to_input_pattern() -> None:
-    """
-    Verify unknown tool falls back to input pattern.
+def test_unknown_tool_with_dangerous_text_no_longer_blocked() -> None:
+    """Unknown tools fall through to safe-by-default (was: regex-flagged).
 
-    验证：unknown tool falls back to input pattern。
+    验证：未知工具不再因输入文本触发 HITL，安全降级为 False。
     """
     assert is_dangerous("no_such_tool", "pods") is False
-    assert is_dangerous("no_such_tool", "rm -rf /") is True
+    assert is_dangerous("no_such_tool", "rm -rf /") is False
 
 
 def test_redact_masks_api_key() -> None:

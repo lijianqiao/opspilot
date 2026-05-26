@@ -13,21 +13,6 @@ import re
 
 from opspilot.tools.registry import get_registered_tools
 
-# Destructive intent in the raw tool input, regardless of tool risk level.
-_DANGEROUS_INPUT_RE = re.compile(
-    r"\b("
-    r"rm\s+-rf|"  # 递归强制删除
-    r"drop\s+table|drop\s+database|"  # SQL 删表/库
-    r"delete\s+from|truncate|"  # 批量删数据
-    r"mkfs|"  # 格式化磁盘
-    r"shutdown|reboot|"  # 关机/重启
-    r"kill\s+-9|"  # 强制杀进程
-    r":\s*0\s*$"  # YAML/配置里 replicas/resources 缩到 0 的简写
-    r")|--force\b|"  # 强制标志（如 kubectl delete --force）
-    r"\bscale\b.*\b0\b",  # kubectl scale ... 0
-    re.IGNORECASE,
-)
-
 # Secrets / PII to mask before any text reaches the user or logs.
 _REDACT_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"sk-[A-Za-z0-9]{6,}"),
@@ -38,24 +23,24 @@ _REDACT_RES: tuple[re.Pattern[str], ...] = (
 
 
 def is_dangerous(tool_name: str, raw_input: str) -> bool:
-    """Return True if the tool is high-risk or input shows destructive intent.
-    若工具为高风险或输入含破坏性意图则返回 True。
+    """Return True if the tool is registered with risk='high'.
+    仅当工具在注册表中标记为 risk='high' 时返回 True。
 
     Args:
         tool_name: Registered tool name.
             已注册的工具名称。
-        raw_input: Raw Action Input string from the agent.
-            智能体传入的 Action Input 原始字符串。
+        raw_input: Raw Action Input string from the agent (unused; kept for
+            signature stability with prior callers).
+            智能体传入的 Action Input 原始字符串（当前未使用，仅保留签名以兼容旧调用方）。
 
     Returns:
         True when execution should require human confirmation.
             为 True 时表示应触发人工确认流程。
     """
+    del raw_input  # raw-input text scanning was removed; see commit message.
     tools = get_registered_tools()
     info = tools.get(tool_name)
-    if info is not None and info.risk == "high":
-        return True
-    return bool(_DANGEROUS_INPUT_RE.search(raw_input or ""))
+    return info is not None and info.risk == "high"
 
 
 def redact(text: str) -> str:
