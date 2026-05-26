@@ -31,7 +31,6 @@ _OPS_OPERATOR_TOOLS = {
     "kubectl_describe",
     "kubectl_scale",
     "kubectl_rollout_restart",
-    "confirm_dangerous_op",
     "query_prometheus",
     "restart_service",
     "scale_service",

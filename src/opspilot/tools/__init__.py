@@ -7,7 +7,6 @@
     工具包对外 API：注册表与各已注册工具导出。
 """
 
-from opspilot.tools.confirm import confirm_dangerous_op
 from opspilot.tools.kubectl_ops import kubectl_describe, kubectl_get
 from opspilot.tools.kubectl_write import kubectl_rollout_restart, kubectl_scale
 from opspilot.tools.log_tools import aggregate_errors, tail_pod_logs
@@ -35,7 +34,6 @@ __all__ = [
     "aggregate_errors",
     "build_tools_prompt",
     "call_tool",
-    "confirm_dangerous_op",
     "get_registered_tools",
     "get_pod_status",
     "kubectl_describe",
