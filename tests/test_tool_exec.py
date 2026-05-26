@@ -274,6 +274,27 @@ def test_observation_redacted(tmp_path) -> None:
     assert "sk-DEADBEEF999999" not in r.observation
 
 
+def test_tool_error_recorded_with_tool_error_status(tmp_path) -> None:
+    """A call_tool failure should audit status='tool_error', not 'executed'.
+
+    工具执行失败应以 status='tool_error' 审计，与正常执行区分。
+    """
+    audit = tmp_path / "a.jsonl"
+    r = guarded_call_tool(
+        "no_such_tool",
+        "x",
+        calls=1,
+        max_calls=8,
+        store=ConfirmationStore(300),
+        audit_path=str(audit),
+    )
+    # Tool failure is not a guardrail block — agent gets the observation back.
+    assert r.blocked is False
+    assert "工具执行错误" in r.observation
+    content = audit.read_text(encoding="utf-8")
+    assert '"status": "tool_error"' in content
+
+
 def test_confirmed_high_risk_tool_does_not_execute_when_audit_fails(monkeypatch, tmp_path) -> None:
     """
     When approved-audit write fails, the high-risk op must NOT run and the

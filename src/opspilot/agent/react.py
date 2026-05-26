@@ -13,7 +13,7 @@ import logging
 
 from opspilot.agent.protocols import SupportsChat
 from opspilot.agent.react_protocol import parse_react_output
-from opspilot.tools.registry import build_tools_prompt, call_tool
+from opspilot.tools.registry import ToolError, build_tools_prompt, call_tool
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,13 @@ async def run_react(
         if parsed.action is None:
             return reply.strip()
 
-        # Execute tool with error handling
-        observation = call_tool(parsed.action, parsed.action_input)
+        # Execute tool with error handling. call_tool raises typed ToolError
+        # on unknown tool / parse failure / tool exception; surface as an
+        # Observation so the LLM can self-correct (mirrors guarded_call_tool).
+        try:
+            observation = call_tool(parsed.action, parsed.action_input)
+        except ToolError as exc:
+            observation = f"工具执行错误：{exc}"
 
         messages.append({"role": "user", "content": f"Observation: {observation}"})
 

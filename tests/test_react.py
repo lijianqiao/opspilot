@@ -58,7 +58,10 @@ async def test_react_unknown_tool_is_reported_then_recovers() -> None:
     answer = await run_react("q", llm)  # type: ignore[arg-type]
     assert "已向用户说明" in answer
     obs = llm.calls[1][-1]["content"]
-    assert "不存在" in obs
+    # call_tool now raises ToolNotFoundError; react.py surfaces it as an
+    # observation prefixed with the standard 工具执行错误 marker.
+    assert "工具执行错误" in obs
+    assert "delete_everything" in obs
 
 
 @pytest.mark.anyio

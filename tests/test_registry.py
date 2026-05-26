@@ -14,6 +14,8 @@ from collections.abc import Generator
 import pytest
 
 from opspilot.tools.registry import (
+    ToolExecutionError,
+    ToolNotFoundError,
     _registry,
     build_tools_prompt,
     call_tool,
@@ -169,23 +171,43 @@ def test_call_tool_first_positional_fallback() -> None:
     assert result == "x-default"
 
 
-def test_call_tool_unknown_tool() -> None:
-    """Unknown tool name should return an error message."""
-    result = call_tool("nonexistent", "input")
-    assert "nonexistent" in result
-    assert "不存在" in result or "错误" in result
+def test_call_tool_raises_for_unknown_tool() -> None:
+    """Unknown tool name should raise ToolNotFoundError.
+
+    未注册工具名应抛出 ToolNotFoundError。
+    """
+    with pytest.raises(ToolNotFoundError):
+        call_tool("nonexistent", "input")
 
 
-def test_call_tool_execution_error() -> None:
-    """Tool that raises should return a formatted error string."""
+def test_call_tool_raises_for_execution_error() -> None:
+    """Tool that raises should surface as ToolExecutionError (wrapped).
+
+    工具抛错时应包装为 ToolExecutionError 向上抛出。
+    """
 
     @register_tool
     def bad_tool(x: str) -> str:
         raise ValueError("something broke")
 
-    result = call_tool("bad_tool", "test")
-    assert "工具执行错误" in result
-    assert "something broke" in result
+    with pytest.raises(ToolExecutionError) as exc_info:
+        call_tool("bad_tool", "test")
+    assert "something broke" in str(exc_info.value)
+
+
+def test_call_tool_raises_for_kwarg_mismatch_instead_of_silent_fallback() -> None:
+    """LLM passing an unknown kwarg must error clearly, not fall back to positional.
+
+    LLM 传入未知 kwarg 时应直接抛错，而非静默退化为位置参数。
+    """
+
+    @register_tool
+    def kubectl_get(resource: str, namespace: str = "default") -> str:
+        """Get a resource."""
+        return f"{resource}@{namespace}"
+
+    with pytest.raises(ToolExecutionError):
+        call_tool("kubectl_get", '{"resource":"pods","extra":"x"}')
 
 
 def test_build_tools_prompt_with_filter() -> None:

@@ -61,7 +61,10 @@ async def test_graph_unknown_tool_is_reported() -> None:
     answer = await run_react_graph("q", llm)
     assert "已向用户说明" in answer
     obs = llm.calls[1][-1]["content"]
-    assert "不存在" in obs
+    # call_tool now raises ToolNotFoundError; guarded_call_tool surfaces it
+    # as a 工具执行错误 observation so the LLM can self-correct.
+    assert "工具执行错误" in obs
+    assert "nonexistent_tool" in obs
 
 
 @pytest.mark.anyio

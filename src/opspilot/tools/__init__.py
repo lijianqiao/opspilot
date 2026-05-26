@@ -15,7 +15,10 @@ from opspilot.tools.pod_status import get_pod_status
 from opspilot.tools.query_loki import query_loki
 from opspilot.tools.query_prometheus import query_prometheus
 from opspilot.tools.registry import (
+    ToolError,
+    ToolExecutionError,
     ToolInfo,
+    ToolNotFoundError,
     build_tools_prompt,
     call_tool,
     get_registered_tools,
@@ -25,7 +28,10 @@ from opspilot.tools.runbook import retrieve_runbook
 from opspilot.tools.service_actions import restart_service, run_remediation, scale_service
 
 __all__ = [
+    "ToolError",
+    "ToolExecutionError",
     "ToolInfo",
+    "ToolNotFoundError",
     "aggregate_errors",
     "build_tools_prompt",
     "call_tool",

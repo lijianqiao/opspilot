@@ -18,7 +18,7 @@ from opspilot.agent.guardrails import is_dangerous, redact
 from opspilot.observability.audit import record_operation
 from opspilot.observability.metrics import record_guardrail_block
 from opspilot.tools.kubectl_write import rollback_info_for
-from opspilot.tools.registry import call_tool
+from opspilot.tools.registry import ToolError, call_tool
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,25 @@ def guarded_call_tool(
                         blocked=True,
                     )
                 # STEP C: execute + executed-audit (best-effort; op already ran).
-                observation = redact(call_tool(tool_name, raw_input))
+                # Distinguish tool_error from executed so auditors can tell
+                # "approved + ran cleanly" from "approved + tool blew up".
+                # The confirmation has already been consumed (single-use) —
+                # on tool_error the operator must re-issue an approval to retry.
+                try:
+                    observation = redact(call_tool(tool_name, raw_input))
+                except ToolError as exc:
+                    observation = redact(str(exc))
+                    record_operation(
+                        tool=tool_name,
+                        tool_input=raw_input,
+                        actor=actor,
+                        confirmed_by=consume_actor,
+                        status="tool_error",
+                        result=observation,
+                        rollback=rollback,
+                        path=audit_path,
+                    )
+                    return GuardedResult(observation=f"工具执行错误：{observation}", blocked=False)
                 record_operation(
                     tool=tool_name,
                     tool_input=raw_input,
@@ -193,8 +211,22 @@ def guarded_call_tool(
             request_id=pc.request_id,
         )
 
-    # 安全工具：直接执行 + 审计 + redact
-    observation = redact(call_tool(tool_name, raw_input))
+    # 安全工具：执行 + 审计；区分 executed / tool_error
+    try:
+        observation = redact(call_tool(tool_name, raw_input))
+    except ToolError as exc:
+        observation = redact(str(exc))
+        record_operation(
+            tool=tool_name,
+            tool_input=raw_input,
+            actor=actor,
+            confirmed_by=None,
+            status="tool_error",
+            result=observation,
+            rollback=None,
+            path=audit_path,
+        )
+        return GuardedResult(observation=f"工具执行错误：{observation}", blocked=False)
     record_operation(
         tool=tool_name,
         tool_input=raw_input,

@@ -18,6 +18,22 @@ from typing import Any, get_type_hints, overload
 
 from opspilot.observability.metrics import record_tool_call
 
+
+class ToolError(RuntimeError):
+    """Base for tool registry / execution failures.
+    工具注册/执行失败的基类。"""
+
+
+class ToolNotFoundError(ToolError):
+    """Raised when the requested tool name isn't registered.
+    请求的工具名未注册。"""
+
+
+class ToolExecutionError(ToolError):
+    """Raised when a tool's input couldn't be parsed or the tool itself failed.
+    工具入参解析失败或工具自身抛错时使用。"""
+
+
 # Module-level registry — populated by @register_tool
 _registry: dict[str, ToolInfo] = {}
 
@@ -216,6 +232,16 @@ def call_tool(name: str, raw_input: str) -> str:
     查找已注册工具并调用，智能解析 raw_input。
 
     Parsing: JSON object kwargs, single required param, or first positional.
+    Failure modes raise typed errors so the caller can audit/observe distinctly
+    from successful execution:
+
+    - Unknown tool name → :class:`ToolNotFoundError`.
+    - JSON dict with bad kwargs → :class:`ToolExecutionError` (no silent
+      fallback to positional, which previously produced nonsense input).
+    - Tool function raising anything else → wrapped in :class:`ToolExecutionError`.
+
+    解析顺序：JSON 对象 kwargs、单一必填参数、首个位置参数。失败统一抛出
+    带类型的异常，方便上层在审计中与成功执行区分。
 
     Args:
         name: Registered tool name.
@@ -224,26 +250,37 @@ def call_tool(name: str, raw_input: str) -> str:
             Action Input 字符串（JSON 或标量）。
 
     Returns:
-        Tool result string, or Chinese error message on failure.
-            工具结果字符串，失败时返回中文错误信息。
+        Tool result string on success.
+            执行成功时返回工具结果字符串。
+
+    Raises:
+        ToolNotFoundError: When ``name`` is not registered.
+            未注册工具名。
+        ToolExecutionError: When input parsing / coercion fails, or when the
+            underlying tool raises any exception.
+            入参解析/类型转换失败，或工具自身抛出异常。
     """
     tools = get_registered_tools()
     if name not in tools:
-        return f"错误：工具 {name} 不存在。可用工具：{list(tools)}"
+        raise ToolNotFoundError(f"tool {name!r} is not registered")
 
     info = tools[name]
     started = time.perf_counter()
     status = "success"
     try:
-        # Try JSON first
+        # 1. JSON object → kwargs (strict: bad kwargs error, no silent positional fallback)
         try:
             args = json.loads(raw_input)
-            if isinstance(args, dict):
-                return info.func(**args)
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except json.JSONDecodeError:
+            args = None
 
-        # Fallback: coerce raw_input to the parameter's annotated type
+        if isinstance(args, dict):
+            try:
+                return info.func(**args)
+            except TypeError as exc:
+                raise ToolExecutionError(f"tool {name} rejected kwargs {list(args)}: {exc}") from exc
+
+        # 2. Coerce raw_input to the parameter's annotated type
         def _coerce(value: str, param_name: str) -> Any:
             props = info.parameters.get("properties", {})
             schema_type = props.get(param_name, {}).get("type", "string")
@@ -252,19 +289,28 @@ def call_tool(name: str, raw_input: str) -> str:
                 return value.lower() in ("true", "1", "yes")
             return python_type(value)
 
-        # Fallback: single required param → pass as that param
+        # 3. Single required param → pass as that param
         required = info.parameters.get("required", [])
         if len(required) == 1:
-            return info.func(**{required[0]: _coerce(raw_input, required[0])})
+            try:
+                return info.func(**{required[0]: _coerce(raw_input, required[0])})
+            except (TypeError, ValueError) as exc:
+                raise ToolExecutionError(f"tool {name} coercion failed: {exc}") from exc
 
-        # Fallback: first positional arg
+        # 4. First positional arg
         params = list(info.parameters.get("properties", {}).keys())
         if params:
-            return info.func(**{params[0]: _coerce(raw_input, params[0])})
+            try:
+                return info.func(**{params[0]: _coerce(raw_input, params[0])})
+            except (TypeError, ValueError) as exc:
+                raise ToolExecutionError(f"tool {name} coercion failed: {exc}") from exc
 
         return info.func(raw_input)
-    except Exception as e:
+    except ToolError:
         status = "error"
-        return f"工具执行错误：{e}"
+        raise
+    except Exception as exc:
+        status = "error"
+        raise ToolExecutionError(f"tool {name} raised: {exc}") from exc
     finally:
         record_tool_call(name, status, time.perf_counter() - started)
