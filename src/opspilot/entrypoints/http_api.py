@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 
+import httpx as _httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import ValidationError
 
@@ -51,10 +52,34 @@ from opspilot.observability.metrics import record_agent_request, render_metrics
 AgentFn = Callable[[str], Awaitable[str]]
 _LLM_BREAKER = CircuitBreakerState()
 
+# 共享 httpx 客户端超时配置：连接 5s / 读 60s / 写 10s / 池等待 5s
+# Shared httpx client timeout: connect 5s / read 60s / write 10s / pool 5s
+_SHARED_HTTPX_TIMEOUT = _httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
+
+
+def _get_shared_http_client(app: FastAPI) -> _httpx.AsyncClient:
+    """Return (and lazily create) the per-app shared httpx.AsyncClient.
+
+    返回（必要时惰性创建）每个 FastAPI app 共享的 httpx.AsyncClient。
+
+    Stored on ``app.state.http_client`` and closed via the registered
+    shutdown event. Lazy-init avoids relying on ASGI lifespan events,
+    which ``httpx.ASGITransport`` does not trigger by default in tests.
+    存放在 ``app.state.http_client`` 上，由注册的 shutdown 事件关闭。
+    采用惰性创建以避免依赖 ASGI lifespan 事件——后者在测试中不会被
+    ``httpx.ASGITransport`` 自动触发。
+    """
+    client = getattr(app.state, "http_client", None)
+    if client is None:
+        client = _httpx.AsyncClient(timeout=_SHARED_HTTPX_TIMEOUT)
+        app.state.http_client = client
+    return client
+
 
 async def _run_agent(
     question: str,
     *,
+    http_client: _httpx.AsyncClient,
     plan: bool = False,
     confirmed_request_id: str | None = None,
     confirmation_context: dict[str, str] | None = None,
@@ -66,6 +91,10 @@ async def _run_agent(
     Args:
         question: User question after strip.
             去空白后的用户问题。
+        http_client: Shared httpx.AsyncClient (from app.state); LLMClient
+            will reuse it and will NOT close it on aclose().
+            从 app.state 取得的共享 httpx.AsyncClient；LLMClient 复用且
+            aclose() 不会关闭它，由 shutdown 钩子统一关闭。
         plan: If True, use Plan-Execute instead of Supervisor.
             为 True 时使用 Plan-Execute，否则 Supervisor。
         confirmed_request_id: Optional id to resume after HITL approval.
@@ -80,23 +109,22 @@ async def _run_agent(
             Agent 回答文本。
     """
     settings = get_settings()
-    llm = LLMClient(settings, breaker=_LLM_BREAKER)
-    try:
-        if plan:
-            return await run_plan_execute(
-                question,
-                llm,
-                confirmed_request_id=confirmed_request_id,
-                confirmation_context=confirmation_context,
-            )
-        return await run_supervisor(
+    # http_client 由 app.state 共享，LLMClient.aclose() 不会关闭它，所以这里
+    # 不再 try/finally aclose——shutdown 钩子会在应用关闭时统一关闭。
+    llm = LLMClient(settings, http_client=http_client, breaker=_LLM_BREAKER)
+    if plan:
+        return await run_plan_execute(
             question,
             llm,
             confirmed_request_id=confirmed_request_id,
             confirmation_context=confirmation_context,
         )
-    finally:
-        await llm.aclose()
+    return await run_supervisor(
+        question,
+        llm,
+        confirmed_request_id=confirmed_request_id,
+        confirmation_context=confirmation_context,
+    )
 
 
 def create_app(agent: AgentFn | None = None) -> FastAPI:
@@ -129,6 +157,24 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
     use_injected_agent = agent is not None
     agent_fn = agent
     app = FastAPI(title="OpsPilot Agent Core")
+
+    # Lazy-init + shutdown 关闭共享 httpx 客户端。on_event 在新版 FastAPI 已弃用，
+    # 但相比 lifespan 它能稳定配合 httpx.ASGITransport 的测试场景，故沿用，
+    # 并就地抑制 DeprecationWarning。
+    # Use on_event (deprecated in newer FastAPI) instead of lifespan because
+    # httpx.ASGITransport doesn't trigger lifespan events by default. The
+    # deprecation warning is suppressed locally — switching to lifespan would
+    # break the test-suite reuse model.
+    import warnings as _warnings
+
+    with _warnings.catch_warnings():
+        _warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*on_event.*")
+
+        @app.on_event("shutdown")  # type: ignore[deprecated]
+        async def _close_shared_http_client() -> None:
+            client = getattr(app.state, "http_client", None)
+            if client is not None:
+                await client.aclose()
 
     @app.middleware("http")
     async def reject_large_bodies(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -206,6 +252,13 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             }.items()
             if v
         }
+        # 共享 httpx 客户端：惰性初始化在 app.state 上，跨请求复用。
+        # 即使 agent 被注入（测试用），也先触发一次以满足
+        # "client identity 跨请求一致" 的契约。
+        # Lazy-init the shared httpx client on app.state so subsequent
+        # requests reuse it. Triggered even for injected-agent (test) path
+        # so the "same instance across requests" contract holds uniformly.
+        shared_http_client = _get_shared_http_client(request.app)
         try:
             if use_injected_agent:
                 assert agent_fn is not None
@@ -213,6 +266,7 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             else:
                 answer = await _run_agent(
                     question,
+                    http_client=shared_http_client,
                     plan=body.plan,
                     confirmed_request_id=body.confirmed_request_id,
                     confirmation_context=confirmation_context or None,
@@ -257,12 +311,12 @@ def create_app(agent: AgentFn | None = None) -> FastAPI:
             payload = require_alertmanager_payload(payload)
         event = normalize_alert_payload(payload, source=source_str)
         settings = get_settings()
-        llm = LLMClient(settings, breaker=_LLM_BREAKER)
-        try:
-            diagnosis = await handle_alert(event, llm)
-            return {"status": "ok", "diagnosis": diagnosis}
-        finally:
-            await llm.aclose()
+        # 复用 app.state 上的共享 httpx 客户端；LLMClient.aclose() 不会关闭它。
+        # Reuse the shared httpx client on app.state; LLMClient.aclose()
+        # is a no-op for injected clients, so the shutdown hook owns close.
+        llm = LLMClient(settings, http_client=_get_shared_http_client(request.app), breaker=_LLM_BREAKER)
+        diagnosis = await handle_alert(event, llm)
+        return {"status": "ok", "diagnosis": diagnosis}
 
     @app.get(
         "/channels/pending/{request_id}",

@@ -163,6 +163,7 @@ async def test_ask_plan_mode(monkeypatch: pytest.MonkeyPatch, auth_token: str) -
     async def mock_run_agent(
         question: str,
         *,
+        http_client: httpx.AsyncClient | None = None,
         plan: bool = False,
         confirmed_request_id: str | None = None,
         confirmation_context: dict[str, str] | None = None,
@@ -198,6 +199,7 @@ async def test_ask_passes_confirmed_request_id_in_production_path(
     async def mock_run_agent(
         question: str,
         *,
+        http_client: httpx.AsyncClient | None = None,
         plan: bool = False,
         confirmed_request_id: str | None = None,
         confirmation_context: dict[str, str] | None = None,
@@ -232,6 +234,7 @@ async def test_ask_builds_confirmation_context_from_body(monkeypatch: pytest.Mon
     async def mock_run_agent(
         question: str,
         *,
+        http_client: httpx.AsyncClient | None = None,
         plan: bool = False,
         confirmed_request_id: str | None = None,
         confirmation_context: dict[str, str] | None = None,
@@ -275,6 +278,7 @@ async def test_ask_confirmation_context_is_none_when_no_channel_info(
     async def mock_run_agent(
         question: str,
         *,
+        http_client: httpx.AsyncClient | None = None,
         plan: bool = False,
         confirmed_request_id: str | None = None,
         confirmation_context: dict[str, str] | None = None,
@@ -592,6 +596,25 @@ async def test_alert_rejects_oversized_body_under_hmac(monkeypatch: pytest.Monke
         )
     assert resp.status_code == 413
     get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_http_client_is_reused_across_requests(auth_token: str) -> None:
+    """The httpx client on app.state survives between requests (no recreation per call).
+
+    验证：app.state 上的 httpx 客户端在多次请求间复用，避免每次 /ask 都重建。
+    """
+    app = create_app(agent=fake_agent)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r1 = await client.post("/ask", headers=_bearer(auth_token), json={"question": "hi"})
+        assert r1.status_code == 200
+        first = app.state.http_client
+        r2 = await client.post("/ask", headers=_bearer(auth_token), json={"question": "hi2"})
+        assert r2.status_code == 200
+        second = app.state.http_client
+    assert first is not None
+    assert first is second
 
 
 @pytest.mark.anyio

@@ -105,6 +105,11 @@ class LLMClient:
                 可选的共享熔断器状态。
         """
         self._settings = settings
+        # 标记客户端归属：仅在自建（http_client 未注入）时由本实例负责 aclose，
+        # 避免共享 client 被某个请求的 aclose 关掉，影响后续请求。
+        # Track ownership: only aclose() the underlying client when we created
+        # it ourselves; never close a caller-injected (shared) client.
+        self._owns_client = http_client is None
         self._client = http_client or httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
         self._breaker = breaker or CircuitBreakerState()
 
@@ -178,8 +183,9 @@ class LLMClient:
             )
 
     async def aclose(self) -> None:
-        """Close the underlying HTTP client.
+        """Close the underlying HTTP client if owned by this instance.
 
-        关闭底层 HTTP 客户端。
+        若底层 HTTP 客户端由本实例创建则关闭；注入的共享客户端不在此关闭。
         """
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()
