@@ -126,9 +126,9 @@ OPSPILOT_USE_MOCK_TOOLS=true
 
 | 平台 | base_url | 模型名示例 |
 | ---- | -------- | ---------- |
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| 硅基流动 | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` |
+| DeepSeek | `https://api.deepseek.com | `deepseek-v4-pro` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-5.5-mini` |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | `Qwen/Qwen3.5-9B` |
 
 完整变量说明见 [.env.example](../.env.example) 与 [README 安全模型](../README.md#安全模型)。
 
